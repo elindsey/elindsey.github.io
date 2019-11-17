@@ -1,10 +1,8 @@
 #!/bin/sh
 set -ex
 
-# bundle install handled by Dockerfile
-#bundle install
-env
-bundle exec jekyll build -s ${LOCATION} -d build
+bundle install # shouldn't be necessary; handled by Dockerfile
+bundle exec jekyll build -d build
 cd build
 
 # tell GH not to run jekyll
@@ -22,7 +20,7 @@ git init
 git config user.name "${GITHUB_ACTOR}"
 git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
 git add .
-git commit -m "automated build"
+git commit -m "automated publish triggered by ${GITHUB_ACTOR}"
 
 set +x # don't print token
 git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" master:${REMOTE_BRANCH}
