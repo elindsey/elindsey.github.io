@@ -8,8 +8,7 @@ on:
       - dev
 
 env:
-  IMAGE_NAME: jekyll-builder
-  IMAGE_ID: docker.pkg.github.com/${{ github.repository }}/${IMAGE_NAME}
+  IMAGE_ID: docker.pkg.github.com/${{ github.repository }}/jekyll-builder
   IMAGE_VERSION: latest
 
 jobs:
