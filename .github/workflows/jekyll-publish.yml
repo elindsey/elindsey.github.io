@@ -1,4 +1,4 @@
-name: Jekyll Build and Publish to Github Pages
+name: Build and Publish to Github Pages
 on:
   push:
     branches:
@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - name: Jekyll Build and Publish
-        env:
+      - env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        uses: elindsey/jekyll-action@master
+        uses: elindsey/jekyll-publish-action@master
