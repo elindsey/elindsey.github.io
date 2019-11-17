@@ -1,6 +1,7 @@
 #!/bin/sh
 set -ex
 
+cd $REPO
 bundle install
 bundle exec jekyll build -d build
 cd build

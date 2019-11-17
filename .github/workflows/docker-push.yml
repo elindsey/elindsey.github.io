@@ -49,4 +49,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
 
       - name: Build and publish new site
-        run: docker run -v ${{ github.workspace }}:/ $IMAGE_ID:$IMAGE_VERSION
+        env:
+          GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }} # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
+          REPO: /repo
+        run: docker run -v ${{ github.workspace }}:$REPO $IMAGE_ID:$IMAGE_VERSION
