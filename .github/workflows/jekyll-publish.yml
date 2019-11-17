@@ -2,7 +2,7 @@ name: Build and Publish to Github Pages
 on:
   push:
     branches:
-      - master
+      - dev
 
 jobs:
   build_and_publish:
