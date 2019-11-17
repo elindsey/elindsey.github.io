@@ -8,7 +8,7 @@ on:
 
 env:
   IMAGE_NAME: jekyll-builder
-  IMAGE_ID: docker.pkg.github.com/${{ github.repository }}/jekyll-build
+  IMAGE_ID: docker.pkg.github.com/${{ github.repository }}/jekyll-builder
   IMAGE_VERSION: latest
 
 jobs:
@@ -22,16 +22,16 @@ jobs:
       - name: Log into registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
 
-      - name: Pull down previous build
+      - name: Pull previous image
         run: docker pull $IMAGE_ID:$IMAGE_VERSION || true
 
-      - name: Build image
+      - name: Build new image
         run: |
           cp Gemfile docker/
           cd docker/
           docker build . --file Dockerfile --tag image
 
-      - name: Push image
+      - name: Push new image
         run: |
           docker tag image $IMAGE_ID:$IMAGE_VERSION
           docker push $IMAGE_ID:$IMAGE_VERSION
