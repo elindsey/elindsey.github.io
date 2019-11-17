@@ -49,5 +49,5 @@ jobs:
       - name: Build and publish new site
         env:
           GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }} # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
-          REPO: /repo
-        run: docker run -v ${{ github.workspace }}:$REPO $IMAGE_ID:$IMAGE_VERSION
+          LOCATION: /jekyll
+        run: docker run -e GITHUB_TOKEN -e GITHUB_ACTOR -e GITHUB_REPOSITORY -e LOCATION -v ${{ github.workspace }}:$LOCATION $IMAGE_ID:$IMAGE_VERSION
