@@ -1,5 +1,6 @@
-name: Docker
+name: Publish Github Pages
 # see https://github.com/actions/starter-workflows/blob/master/ci/docker-push.yml
+# and https://github.com/elindsey/jekyll-publish-action
 
 on:
   push:
@@ -12,7 +13,7 @@ env:
   IMAGE_VERSION: latest
 
 jobs:
-  push:
+  push_builder_image:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
 
@@ -35,3 +36,17 @@ jobs:
         run: |
           docker tag image $IMAGE_ID:$IMAGE_VERSION
           docker push $IMAGE_ID:$IMAGE_VERSION
+
+  push_site:
+      runs-on: ubuntu-latest
+      if: github.event_name == 'push'
+      needs: push_builder_image
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Log into registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+
+      - name: Build and publish new site
+        run: docker run -v ${{ github.workspace }}:/ $IMAGE_ID:$IMAGE_VERSION
