@@ -10,5 +10,6 @@ jobs:
     steps:
       - uses: actions/checkout@v1
       - env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
+          GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }}
         uses: elindsey/jekyll-publish-action@master
