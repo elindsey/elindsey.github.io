@@ -9,8 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v1
-      - run: docker login docker.pkg.github.com -u $GITHUB_ACTOR -p ${{ secrets.GITHUB_TOKEN }}
       - env:
           # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
           GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }}
-        uses: docker://docker.pkg.github.com/elindsey/jekyll-publish-action/jekyll-4:latest
+        run: |
+            docker login docker.pkg.github.com -u $GITHUB_ACTOR -p ${{ secrets.GITHUB_TOKEN }}
+            docker run docker.pkg.github.com/elindsey/jekyll-publish-action/jekyll-4:latest
