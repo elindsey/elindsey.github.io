@@ -1,0 +1,35 @@
+# For technical reasons, this file is *NOT* reloaded automatically when you use
+# 'bundle exec jekyll serve'. If you change this file, please restart the server process.
+
+title: silicon_sprawl_
+author: Eli Lindsey
+email: eli@siliconsprawl.com
+baseurl: "" # the subpath of your site, e.g. /blog
+url: "https://siliconsprawl.com" # the base hostname & protocol for your site, e.g. http://example.com
+github_username: elindsey
+linkedin_username: elilind
+rss: rss
+
+plugins:
+  - jekyll-feed
+  - jekyll-seo-tag
+
+# Exclude from processing.
+# The following items will not be processed, by default.
+# Any item listed under the `exclude:` key here will be automatically added to
+# the internal "default list".
+#
+# Excluded items can be processed by explicitly listing the directories or
+# their entries' file path in the `include:` list.
+#
+# exclude:
+#   - .sass-cache/
+#   - .jekyll-cache/
+#   - gemfiles/
+#   - Gemfile
+#   - Gemfile.lock
+#   - node_modules/
+#   - vendor/bundle/
+#   - vendor/cache/
+#   - vendor/gems/
+#   - vendor/ruby/
