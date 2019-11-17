@@ -38,9 +38,9 @@ jobs:
           docker push $IMAGE_ID:$IMAGE_VERSION
 
   push_site:
-      runs-on: ubuntu-latest
-      if: github.event_name == 'push'
-      needs: push_builder_image
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: push_builder_image
 
     steps:
       - uses: actions/checkout@v1
