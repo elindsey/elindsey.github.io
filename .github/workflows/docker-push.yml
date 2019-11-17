@@ -8,6 +8,8 @@ on:
 
 env:
   IMAGE_NAME: jekyll-builder
+  IMAGE_ID: docker.pkg.github.com/${{ github.repository }}/jekyll-build
+  IMAGE_VERSION: latest
 
 jobs:
   push:
@@ -17,19 +19,19 @@ jobs:
     steps:
       - uses: actions/checkout@v1
 
+      - name: Log into registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+
+      - name: Pull down previous build
+        run: docker pull $IMAGE_ID:$IMAGE_VERSION || true
+
       - name: Build image
         run: |
           cp Gemfile docker/
           cd docker/
           docker build . --file Dockerfile --tag image
 
-      - name: Log into registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
-
       - name: Push image
         run: |
-          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/$IMAGE_NAME
-          echo IMAGE_ID=$IMAGE_ID
-          echo VERSION=latest
-          docker tag image $IMAGE_ID:$VERSION
-          docker push $IMAGE_ID:$VERSION
+          docker tag image $IMAGE_ID:$IMAGE_VERSION
+          docker push $IMAGE_ID:$IMAGE_VERSION
