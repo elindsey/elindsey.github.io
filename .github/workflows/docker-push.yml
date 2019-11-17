@@ -30,7 +30,7 @@ jobs:
         run: |
           cp Gemfile docker/
           cd docker/
-          docker build . --file Dockerfile --tag image
+          docker build . --cache-from $IMAGE_ID:$IMAGE_VERSION --file Dockerfile --tag image
 
       - name: Push new image
         run: |
