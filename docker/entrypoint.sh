@@ -1,7 +1,8 @@
 #!/bin/sh
 set -ex
 
-bundle install # shouldn't be necessary; handled by Dockerfile
+# shouldn't be necessary; handled by Dockerfile
+#bundle install
 bundle exec jekyll build -d build
 cd build
 
