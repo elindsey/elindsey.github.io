@@ -12,4 +12,5 @@ jobs:
       - env:
           # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
           GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }}
-        uses: docker://elindsey/jekyll-publish-action:latest
+        run: docker login docker.pkg.github.com -u ${{ GITHUB_ACTOR }} -p ${{ secrets.GITHUB_TOKEN }}
+        uses: docker://docker.pkg.github.com/elindsey/jekyll-publish-action/jekyll-4:latest
