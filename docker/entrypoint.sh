@@ -1,9 +1,11 @@
 #!/bin/sh
 set -ex
 
-cd $REPO
-bundle install
-bundle exec jekyll build -d build
+# bundle install handled by Dockerfile
+#bundle install
+env
+pwd
+bundle exec jekyll build -s ${REPO} -d build
 cd build
 
 # tell GH not to run jekyll
