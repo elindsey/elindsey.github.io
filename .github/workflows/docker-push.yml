@@ -1,0 +1,35 @@
+name: Docker
+# see https://github.com/actions/starter-workflows/blob/master/ci/docker-push.yml
+
+on:
+  push:
+    branches:
+      - dev
+
+env:
+  IMAGE_NAME: jekyll-builder
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Build image
+        run: |
+          cp Gemfile docker/
+          cd docker/
+          docker build . --file Dockerfile --tag image
+
+      - name: Log into registry
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login docker.pkg.github.com -u ${{ github.actor }} --password-stdin
+
+      - name: Push image
+        run: |
+          IMAGE_ID=docker.pkg.github.com/${{ github.repository }}/$IMAGE_NAME
+          echo IMAGE_ID=$IMAGE_ID
+          echo VERSION=latest
+          docker tag image $IMAGE_ID:$VERSION
+          docker push $IMAGE_ID:$VERSION
