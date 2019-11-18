@@ -25,6 +25,7 @@ plugins:
 #
 exclude:
     - docker/
+    - README.md
 #   - .sass-cache/
 #   - .jekyll-cache/
 #   - gemfiles/
