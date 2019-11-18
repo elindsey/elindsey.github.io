@@ -9,6 +9,10 @@ RUN gem install bundler && \
     apt-get install -y \
         build-essential \
         git && \
-    bundle install
+    bundle install && \
+    # clean up the intermediate object files from native extensions
+    # their fully linked .so should already be in the gem's lib
+    find /usr/local/bundle/gems -name 'Makefile' -printf "%h\0" | xargs -0 -I % make -C % clean && \
+    apt-get autoremove -y build-essential
 
 ENTRYPOINT ["/entrypoint.sh"]
