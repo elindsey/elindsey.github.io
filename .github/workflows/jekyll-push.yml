@@ -1,6 +1,4 @@
 name: Publish Github Pages
-# see https://github.com/actions/starter-workflows/blob/master/ci/docker-push.yml
-# and https://github.com/elindsey/jekyll-publish-action
 
 on:
   push:
@@ -37,7 +35,8 @@ jobs:
 
       - name: Build and publish new site
         env:
-          GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }} # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
-        # unfortunately 'uses' doesn't play well with github package repositories
+          # GITHUB_TOKEN is buggy with public sites; using a personal access token for now
+          GITHUB_TOKEN: ${{ secrets.JEKYLL_ACCESS_TOKEN }}
+        # unfortunately 'uses' doesn't currently work with github package repositories
         # https://github.community/t5/GitHub-Actions/How-to-use-GitHub-registry-docker-image-in-a-service/td-p/33206
         run: docker run -e GITHUB_TOKEN -e GITHUB_ACTOR -e GITHUB_REPOSITORY -v $GITHUB_WORKSPACE:/workspace -w /workspace $IMAGE_ID:$IMAGE_VERSION
