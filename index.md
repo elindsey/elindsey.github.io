@@ -2,4 +2,4 @@
 layout: home
 ---
 
-<img src="/assets/app.png" alt="Apps ugh">
+This page intentionally left blank.
