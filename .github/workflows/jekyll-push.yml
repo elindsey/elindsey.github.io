@@ -24,7 +24,7 @@ jobs:
 
       - name: Build new image
         run: |
-          cp Gemfile docker/
+          cp Gemfile Gemfile.lock docker/
           cd docker/
           docker build . --cache-from $IMAGE_ID:$IMAGE_VERSION --file Dockerfile --tag image
 
