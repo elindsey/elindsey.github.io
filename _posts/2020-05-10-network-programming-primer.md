@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Network Programming Primer"
+title: "Network Programming: Where to Start"
 ---
 
 Expertise is a funny thing. It creeps up on you - there's no four year track that ends with a ceremony and a certificate, no one that shows up to teach you a secret handshake or give you a challenge coin. In fact, there isn't really an end at all. Things just keep changing, new becomes old, then often old becomes new all over again. The only real difference is that it gets easier to contextualize and understand something new, to use past experience to feel out a direction.
