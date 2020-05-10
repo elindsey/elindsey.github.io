@@ -4,7 +4,7 @@ title: support
 ---
 
 If you're looking to support work that I've done, please consider donating to
-any of these organizations instead. Any amount is welcome, and all accept
+one of these organizations instead. Any amount is welcome, and all accept
 contributions as small as $5.
 
 ### [Union of Concerned Scientists](https://ucsusa.org)
