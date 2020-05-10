@@ -3,8 +3,8 @@ layout: page
 title: about
 ---
 
-I'm a software developer and tech lead focused on networking, systems
-programming, performance optimization, data science, and operations.
+I'm a software developer and tech lead focused on networking and systems
+programming. 
 
 I've worked at a [few](https://aws.amazon.com)
 [different](https://www.facebook.com) [places](https://ns1.com); my resume
