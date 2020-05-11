@@ -8,7 +8,7 @@ Lately I've been getting more questions about how to start out in network progra
 I've been in this space ten years now, working across layers 3 to 7 on CDNs, DNS, and protocol stacks at a couple of FAANGs and a startup. If you name a piece of software that runs in an edge network, I've probably seen one (or three) versions of it.
 
 Advice is tricky. It's easy to turn things I learned into Things Everyone Should Learn. It's also easy to fit an inaccurate narrative to a path, to recast something as a logical progression when it was really blind stumbling around. 
-I could spin a yarn about how networking was the first thing I did with computers, how I did a CCNA in high-school and something something destiny. But I could also tell the story of how I did that CCNA primarily to get out of taking PE, and how I found my college networking class so tedious that I dropped it in the first week and never tried again (for some inexplicable reason it was an optional elective at my university). 
+I could spin a yarn about how networking was the first thing I did with computers, how I did a CCNA in high-school and something something destiny. But I could also tell the story of how I did that CCNA primarily to get out of taking PE, and how I found my college networking class so tedious that I dropped it in the first week and never tried again (for some inexplicable reason it was an optional elective at my university).
 
 I'll avoid all that - I don't think my exact career path is all that interesting. But I'll offer exactly one piece of advice (because I can't entirely resist), and a handful of books that I've found useful and interesting (because too many are not both). If the advice doesn't resonate, ignore it. If a book seems boring, skip it.
 
