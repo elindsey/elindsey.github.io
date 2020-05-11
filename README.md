@@ -11,3 +11,4 @@ Refer to
 [.github/workflows](https://github.com/elindsey/elindsey.github.io/tree/dev/.github/workflows)
 for the entirely self-contained deployment workflow. This model is easily
 extensible to other static site generators.
+
