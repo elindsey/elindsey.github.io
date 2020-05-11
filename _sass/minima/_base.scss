@@ -243,3 +243,13 @@ table {
     border: 1px solid $grey-color-light;
   }
 }
+
+/**
+ * Footnotes
+ */
+.footnotes  {
+    border: 0 solid $grey-color-dark;
+    border-top-width: 1px;
+    margin-top: 3rem;
+    font-size: $small-font-size;
+}
