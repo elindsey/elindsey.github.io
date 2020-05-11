@@ -3,11 +3,11 @@ layout: post
 title: "Network Programming Self-Study"
 ---
 
-Expertise is a funny thing. It creeps up on you - there's no four year track that ends with a ceremony and a certificate, no one that shows up to teach you a secret handshake or give you a challenge coin. In fact, there isn't really an end at all. Things just keep changing, new becomes old, then often old becomes new all over again. The only real difference is that it gets easier to contextualize and understand something new, to use past experience to feel out a direction.
+Lately I've been getting more questions about how to start out in network programming: what books to read, what projects to try, and how to make a career of it.
 
-It's been ten years, a couple of FAANGs and a startup, working from layers 3 to 7 on CDNs, DNS, and protocol stacks. If you name a piece of software that runs in an edge network, I've probably worked on one or three versions of it at this point. 
+Expertise is a funny thing. It creeps up on you - there's no four year track that ends with a ceremony and a certificate, no one that shows up to teach you a secret handshake or give you a challenge coin. In fact, there isn't really an end at all. Things just keep changing, new becomes old, then often old becomes new all over again. The only real difference is that it gets easier to contextualize and understand something new, and a lot of new things no longer seem novel.
 
-Recently I'm getting more questions about how to get started in the field, what books to read, what projects to try, and how to make a career of it.
+It's been ten years, a couple of FAANGs and a startup, working from layers 3 to 7 on CDNs, DNS, and protocol stacks. If you name a piece of software that runs in an edge network, I've probably worked on one (or three) versions of it at this point. 
 
 Advice is tricky. It's easy to turn things I learned into Things Everyone Should Learn. It's also easy to fit an inaccurate narrative to a path, to recast something as a logical progression when it was really blind stumbling around. 
 I could spin a yarn about how networking was the first thing I did with computers, how I did a CCNA in high-school and then something something destiny. But I could also tell the story of how I did that CCNA primarily to get out of taking PE, and how I found my college networking class so tedious that I dropped it in the first week and never tried again (for some inexplicable reason it was an optional elective at my university). 
@@ -16,14 +16,16 @@ I'll try to avoid all that. I'll offer exactly one piece of advice (because I ca
 
 ### General Advice 
 
-Networks are not a pure, abstract technology. Honestly nothing is, but networks in particular are physical, temporal things. They exist in a certain place at a certain time, influenced by people, technology, nature, and politics. You will be a better developer if you involve yourself in the reality of networking.  Follow NANOG, OARC, or other lists where operators hang out, try to understand the discussion, their mindsets and biases. Pay attention to things, and pay attention _as they are happening_. If there's an operational event or outage, follow it, attempt to debug as it unfolds, then later compare notes with whoever was working it. I consider working on something independently until you get stuck and then articulating exactly why and what you're stuck on to be one of the most useful skills you can develop, and working events in realtime is a great way to practice.
+Networks are not a pure, abstract technology. Honestly nothing is, but networks in particular are physical, temporal things. They exist in a certain place at a certain time, influenced by people, technology, nature, and politics. 
+
+You will be a better developer if you involve yourself in the reality of networking.  Follow NANOG, OARC, or other lists where operators hang out, try to understand the discussion, their mindsets and biases. Pay attention to things, and pay attention _as they are happening_. If there's an operational event or outage, follow it, attempt to debug as it unfolds, then later compare notes with whoever was working it. Working on something independently until you get stuck and then articulating exactly what you're stuck on is one of the most useful skills you can develop, and working events in realtime is a great way to practice.
 
 ### Networking Resources
 
 1. [High Performance Browser Networking](https://hpbn.co) - this is an excellent crash course on protcols and browsers. This is 90% of what most software developers need to know about networking. It's available for free online.
 2. [Interconnections](https://www.amazon.com/Interconnections-Bridges-Switches-Internetworking-Protocols/dp/0201634481) - this is my favorite resource for learning about routing protocols. Perlman is extremely accomplished in the field _and_ has an accessible writing style. A few newer protocols are missing, but this will give you the necessary background to pick those up easily. It's very affordable since it's an older book.
 3. [Network Routing](https://www.amazon.com/Network-Routing-Algorithms-Architectures-Networking-ebook/dp/B075H8ZPZK) - I only recommend this for the chapter on hardware, and possibly the chapter on label switching. It has a great overview of how a physical router is put together and works, but most of the book is dry and nowhere near as engaging as Perlman. Unfortunately it is an expensive text; borrow it if you can.
-4. [The Internet Peering Playbook](http://drpeering.net/core/bookOutline.html) - this book is all about the people/business side of how the Internet functions. It's a fascinating read and even if you don't work in the space will help you understand the dynamics of eg. cable companies, large Internet players, etc. The physical book is impossible to obtain, but the Kindle edition is inexpensive or much of the content is available for free on the DrPeering site.
+4. [The Internet Peering Playbook](http://drpeering.net/core/bookOutline.html) - this book is all about the people/business side of how the Internet functions. It's a fascinating read and even if you don't work in the space will help you understand the dynamics of eg. cable companies, large Internet players, etc. The physical book is impossible to obtain, but the Kindle edition is inexpensive and much of the content is available for free on the DrPeering site.
 
 ### Systems Programming Resources
 
@@ -36,19 +38,19 @@ Network programming is a form of systems programming. There are certain systems 
 
 ### Project Ideas
 
-1. Read the DNS RFCs and implement either a stub resolver or an authoritative server in your language of choice. Start with a few record types and expand as long as you're interested. Use wireshark to view the traffic and help debug.
+1. Read the DNS RFCs and implement either a stub resolver or an authoritative server in your language of choice. Start with a few record types and expand as long as you're interested. Use wireshark to view the traffic and debug.
 
-    You'll eventually need to learn how to read RFCs, and the original DNS RFCs are fairly straightforward. DNS isn't encrypted so you'll have an easy time sniffing your traffic during development. Best of all, it's exciting getting a piece of software you wrote interacting with something you didn't write - either using your stub resolver to query a public DNS server, or using dig/unbound to query your authoritative server. Plus DNS is fun.
+    You'll eventually need to learn how to read RFCs, and the original DNS RFCs are straightforward. DNS isn't encrypted so you'll have an easy time sniffing your traffic during development. Best of all, it's exciting getting a piece of software you wrote interacting with something you didn't write - either using your stub resolver to query a public DNS server, or using dig/unbound to query your authoritative server. DNS is fun.
 
-2. Play with a lab network. This doesn't need to be a physical lab - [GNS3](https://www.gns3.com) with [VyOS](https://www.vyos.io), [MikroTik](https://wiki.mikrotik.com/wiki/Manual:CHR), or any Linux distro running [FRRouting](https://frrouting.org) makes a great environment for experimentation. You can build a complex network environment, packet sniff every single link to see how routers are communicating, and drop a container or VM running your own network software into the mix.
+2. Play with a lab network. This doesn't need to be a physical lab - [GNS3](https://www.gns3.com) with [VyOS](https://www.vyos.io), [MikroTik](https://wiki.mikrotik.com/wiki/Manual:CHR), or any Linux distro running [FRRouting](https://frrouting.org) makes a great environment for experimentation. You can build a complex network environment, packet sniff every single link to see how routers are communicating, and drop a container or VM running your own network software into the mix. If you need a goal, try setting up two separate ASes, one running IS-IS and one running OSPF. Model an Internet exchange and have them peer.
 
 ### Tangent: Languages
 
-I'm going to avoid languages except for one note: you'll need to know C, even if it's just enough to read others' code. There are plenty of ways to learn it, but I'd recommend [Modern C](https://modernc.gforge.inria.fr). I have some minor nits with the book (disagree some about unsigned; see little relevance in C11 over C99), but it's a free, high-quality, concise text that covers all the language features you need to know and touches on many of the problematic areas.
+I'm going to avoid languages except for one note: you'll need to know C, even if it's just enough to read others' code. There are plenty of ways to learn it, but I'd recommend [Modern C](https://modernc.gforge.inria.fr). I have some minor nits with the book, but it's a high-quality, concise, freely available text that covers all the language features you need to know and points out many of the problematic areas.
 
 C is a simple language. It doesn't benefit from reading many books or tutorials. Most of the complexity lies in working with memory and dealing with optimizing compilers, so you must use it to understand it.
 
-If you want a starter C project, try implementing malloc. You'll learn about virtual memory, commited versus reserved pages, fragmentation, and how to write fast software. You'll also gain and understanding of how even simple looking C stdlib functions hide significant complexity (try to imagine what complexity a higher level langauge hides). When you're done, read about tcmalloc or jemalloc and compare notes. Run your code under asan and ubsan to find bugs.
+If you want a starter C project, try implementing malloc. You'll learn about virtual memory, commited versus reserved pages, fragmentation, and how to write fast software. You'll also gain an understanding of how even simple looking C stdlib functions hide significant complexity (try to imagine what complexity a higher level langauge hides). When you're done, read about tcmalloc or jemalloc and compare notes. Run your code under asan and ubsan to find bugs.
 
 ### The End
 
