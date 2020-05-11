@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Network Programming Primer"
+title: "Network Programming Self-Study"
 ---
 
 Expertise is a funny thing. It creeps up on you - there's no four year track that ends with a ceremony and a certificate, no one that shows up to teach you a secret handshake or give you a challenge coin. In fact, there isn't really an end at all. Things just keep changing, new becomes old, then often old becomes new all over again. The only real difference is that it gets easier to contextualize and understand something new, to use past experience to feel out a direction.
@@ -34,7 +34,7 @@ Network programming is a form of systems programming. There are certain systems 
 3. [The Linux Programming Interface](https://www.amazon.com/Linux-Programming-Interface-System-Handbook-ebook/dp/B004OEJMZM) - in the tradition of _The Unix Programming Environment_ and _TCP/IP Illustrated_, this is my preferred one-stop shop for Linux APIs. Lucid, in-depth writing, broad coverage.
 4. [Systems Performance](https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg-ebook/dp/B00FLYU9T2/) - you will need to think about performance, it comes with the territory. This is the book to read on performance. Also, check out Brendan Gregg's blog, talks, and more recent work on BPF.
 
-### Self-Study Project Ideas
+### Project Ideas
 
 1. Read the DNS RFCs and implement either a stub resolver or an authoritative server in your language of choice. Start with a few record types and expand as long as you're interested. Use wireshark to view the traffic and help debug.
 
