@@ -44,10 +44,26 @@ than one bit at a time - this is typically referred to as a multibit stride.
 
 Multibit strides will get you significantly faster lookup time at the cost of
 some memory - in order to align all comparisons on the stride size, you'll need
-to expand some prefixes. For example, the prefix 110\* stored in a multibit
-trie with a stride size of two would need to be expanded to 1101\* and 1100\*.
-This means the total size of the trie has increased, but we will need at most
-two instead of three memory accesses so our lookup time has decreased.
+to expand some prefixes. 
+
+As an example, let's say you're building a trie that contains three prefixes:
+* Prefix 1: 01\*
+* Prefix 2: 110\*
+* Prefix 3: 10\*
+
+A unibit trie would look like this:
+![unibit trie diagram](/assets/images/unibit.png)
+
+If instead we want to use a multibit trie with a stride of two bits, then
+prefix 2 needs to be expanded into its two sub-prefixes, 1101\* and 1100\*. Our
+multibit trie would look like this:
+
+![multibit trie diagram](/assets/images/multibit.png)
+
+Note how this trie has incresed our memory usage by duplicating prefix 2, but
+has reduced our memory accesses and improved locality (there are far fewer
+pointers chased in this diagram), thus trading memory usage for lookup
+performance.
 
 Most of the time a multibit trie is where you can stop. If you need to optimize
 further, especially if you need to start reducing memory usage, then you'll
