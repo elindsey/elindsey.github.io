@@ -216,10 +216,51 @@ shift64(unsigned char):
 ```
 
 
-The relevant thing to note is that gcc's int128 emulation has replaced the
-explicit branch in the int64 version with an `and` and two `cmovne`.  This
-eliminates branch misprediction and will be _much_ faster in tight loops with
-varied subnet masks.
+There are a few interesting things to note:
+1. `sal` will automatically mask its shift operand to the appropriate range, so
+   while it's undefined behavior in C to shift by more than the size of the
+target, this is fine at the asm level
+2. `and` with 64 is using knowledge of undefined behavior - our shift is only
+   well-defined within the range of 1-127, so we assume UB is impossible and
+ignore the range outside.
+3. `cmov` is used instead of a jump. On modern hardware this should be strictly
+   better, though is most noticeable when jumps are unpredictable. Our jumps
+should be very predictable here.
+
+If we wanted, we could rewrite the int64 version in a way that would more
+closely match the int128 assembly:
+
+```c
+Pair shift64_v2(uint8_t shift) {
+    uint64_t upper = -1;
+    uint64_t lower = -1;
+    lower <<= (shift & 0x3F);
+    if (shift > 0x3F) {
+        upper = lower;
+        lower = 0;
+    }
+
+    return Pair{upper, lower};
+}
+```
+
+```
+shift64_v2(unsigned char):
+        mov     ecx, edi
+        mov     rdx, -1
+        mov     rax, -1
+        sal     rdx, cl
+        cmp     dil, 63
+        jbe     .L4
+        mov     rax, rdx
+        xor     edx, edx
+.L4:
+        ret
+```
+
+Note how the assembly does not contain any explicit `and` with 0x3F, we've
+merely communicated to the compiler that we want the `sal` instruction's
+default mask behvior. Our `cmov` has also been converted to `jmp`.
 
 Previously I'd hoped that I could use the 128-bit SSE registers and mm
 intrinsics to operate on IPv6 addresses natively. However, operations to use
