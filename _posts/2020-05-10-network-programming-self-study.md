@@ -53,3 +53,7 @@ If you want a starter C project, try implementing malloc. You'll learn about vir
 ### The End
 
 Good luck and have fun!
+
+### Addenda
+
+Most people will get the DNS knowledge they need from the books listed in the Networking Resources section. But if you want significantly more depth (eg. if you're starting a new job at a DNS company) then I recommend [Managing Mission-Critical Domains and DNS](https://www.amazon.com/Managing-Mission-Critical-Demystifying-nameservers-ebook/dp/B07F71QMFM). I like that it covers the entire ecosystem - registrars, WHOIS, DNS, DNSSEC, some major open-source implementations, and even touches on operations/DDOS.
