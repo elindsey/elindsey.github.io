@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Getting Started with Ray Tracing"
+title: "Learning About Ray Tracing"
 ---
 
 I've had more time than usual for side projects since I've been stuck inside
