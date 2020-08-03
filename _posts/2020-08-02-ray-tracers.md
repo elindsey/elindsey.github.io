@@ -31,3 +31,20 @@ if you expect you'll be spending a lot of time with it).
 is a lot of fun.  He implemented a ray tracer in every imaginable way; it makes
 for great reading to compare some of the paths I didn't take (eg. Metal or
 other modern GPU frameworks).
+
+There's a lot of work left, but it's still fun to look at how far things have
+come. Here's a few images showing the evolution of my ray tracer's output, from
+the very first image it rendered to the current state:
+
+![](/assets/images/rt/1.png)
+
+![](/assets/images/rt/2.png)
+
+![](/assets/images/rt/3.png)
+
+![](/assets/images/rt/4.png)
+
+![](/assets/images/rt/5.png)
+
+![](/assets/images/rt/6.png)
+
