@@ -6,7 +6,7 @@ title: "Learning About Ray Tracing"
 I've had more time than usual for side projects since I've been stuck inside
 the past few months. I spent the majority of June digging into graphics, getting
 acquainted with the field by building a ray tracer. The initial version is now
-online as [ecl_rt](https://github.com/elindsey/ecl_rt).
+online as [ecl_rt](https://github.com/elindsey/ecl_rt_legacy).
 
 Rather than write yet another post about building a ray tracer, I'll point to
 the handful of resources (from the multitude available) that were actually useful:

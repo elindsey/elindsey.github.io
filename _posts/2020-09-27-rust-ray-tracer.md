@@ -5,7 +5,7 @@ title: "Porting a C99 Ray Tracer to Rust"
 
 I needed to pick up Rust for work, so I ported my existing ray tracer to the
 language for a little practice. It's now in the unimaginatively named
-[ecl_rrt](https://github.com/elindsey/ecl_rrt).
+[ecl_rt](https://github.com/elindsey/ecl_rrt).
 
 Overall it was a pleasant experience. I particularly like Rust's object system
 (am I allowed to call it that?), the bounded generics, how it handles numeric
@@ -19,7 +19,7 @@ confused and everything started failing to link.
 
 The initial port was ~40% slower than the equivalent C99 codebase. Replacing
 the rand crate with the same custom PRNG I use in
-[ecl_rt](https://github.com/elindsey/ecl_rt) closed the gap to 15-20%. That's
+[ecl_rt_legacy](https://github.com/elindsey/ecl_rt_legacy) closed the gap to 15-20%. That's
 still much higher than I'd like, but I haven't had time to dig into it in
 depth. I can say that it's not related to threading and nothing in the Rust
 assembly looks _too_ off - bounds checking isn't hurting me very much, there
