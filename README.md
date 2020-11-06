@@ -12,3 +12,10 @@ Refer to
 for the entirely self-contained deployment workflow. This model is easily
 extensible to other static site generators.
 
+## Local Development
+
+```
+bundle install
+bundle exec jekyll serve
+```
+
