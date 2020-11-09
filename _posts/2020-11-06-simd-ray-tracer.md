@@ -116,11 +116,8 @@ need to add logging to rayon's join splitting, but my hunch is that it's
 doing a better job of keeping the batch size as high as possible without
 causing cores to go idle.
 
-Update: Looking into it a bit more, rayon's initially splitting by the number
-of threads and then breaking jobs up further only when threads go idle and need to 
-steal - the optimal way to adaptively execute this workload. I'm still a tad behind
-when I replicate that behavior on top of `crossbeam::deque` directly, so there are
-still a few unanswered questions here.
+Update: See [this post](/2020/11/09/rust-emit-asm.html) for more
+investigation of the performance regression.
 
 ## SIMD
 
