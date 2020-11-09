@@ -25,7 +25,7 @@ to look at the asm for an arbitrary release build.
 [Previously](/2020/11/06/simd-ray-tracer.html) I rewrote my ray tracer
 to use `crossbeam::scope` and `crossbeam::queue` instead of rayon. Internally
 rayon leans heavily on `crossbeam::deque` for its work-stealing implementation, so
-my expectation was that this change would neutral or a slight improvement, 
+my expectation was that this change would be neutral or a slight improvement, 
 depending on how good of a job the compiler had been doing to condense
 rayon's abstractions.
 
