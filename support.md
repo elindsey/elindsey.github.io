@@ -36,6 +36,10 @@ digging through the stacks for Harry Harrison novels and racking up stickers
 from the summer reading program. It was probably the institution most
 responsible for my education, moreso than the public school system.
 
-### [New York Public Library](https://www.nypl.org/give)
+### [Queens Public Library](https://www.queenslibrary.org/support)
 
-NYPL gets a lot of my tax dollars, but they still manage to spend it all.
+QPL is an [excellent
+library](https://web.archive.org/web/20100614002557/http://www.libraryjournal.com/article/CA6663764.html).
+It's the most useful, friendly, and locally engaged library system I've ever
+had the privilege to use.
+
