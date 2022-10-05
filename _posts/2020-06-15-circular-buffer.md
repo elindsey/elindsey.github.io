@@ -177,6 +177,16 @@ notEmpty := curr ^ upstream
 upmult := (notEmpty >> 63) - (-notEmpty >> 63)                                                                                                                                                  
 upstreamLimit := (upstream * upmult) + ((curr + bufSize - 1) * (^upmult & 1)) 
 ```
+Update: turns out there is a way to express this. At least as of go 1.19, this
+generates the assembly I'm looking for - straightline code with a `cmp` but not `jmp`.
+```go
+upstream := atomic.LoadInt64(&p.upstream.cursor)
+empty := int64(0)
+if curr^upstream == 0 {
+    empty = 1
+}
+upstreamLimit := (upstream * (empty^1)) + ((curr + bufSize - 1) * empty)
+```
 
 One last note: channels in go are deeply integrated with the runtime and do
 things like make explicit gopark/goready calls, copy values from one
