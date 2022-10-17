@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo="><!-- Begin Jekyll SEO tag v2.6.1 -->
+<title>Rust emit=asm Can Be Misleading | silicon_sprawl_</title>
+<meta name="generator" content="Jekyll v4.0.1" />
+<meta property="og:title" content="Rust emit=asm Can Be Misleading" />
+<meta name="author" content="Eli Lindsey" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="The short version" />
+<meta property="og:description" content="The short version" />
+<link rel="canonical" href="https://siliconsprawl.com/2020/11/09/rust-emit-asm.html" />
+<meta property="og:url" content="https://siliconsprawl.com/2020/11/09/rust-emit-asm.html" />
+<meta property="og:site_name" content="silicon_sprawl_" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-11-09T00:00:00+00:00" />
+<script type="application/ld+json">
+{"datePublished":"2020-11-09T00:00:00+00:00","author":{"@type":"Person","name":"Eli Lindsey"},"description":"The short version","url":"https://siliconsprawl.com/2020/11/09/rust-emit-asm.html","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://siliconsprawl.com/2020/11/09/rust-emit-asm.html"},"headline":"Rust emit=asm Can Be Misleading","dateModified":"2020-11-09T00:00:00+00:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://siliconsprawl.com/feed.xml" title="silicon_sprawl_" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">silicon_sprawl_</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about.html">about</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Rust emit=asm Can Be Misleading</h1>
+    <p class="post-meta"></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <h2 id="the-short-version">The short version</h2>
+
+<p>Cargo builds like:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ RUSTFLAGS</span><span class="o">=</span><span class="s2">"--emit asm"</span> cargo build <span class="nt">--release</span>
+<span class="nv">$ </span>cargo rustc <span class="nt">--release</span> <span class="nt">--</span> <span class="nt">--emit</span> asm
+</code></pre></div></div>
+
+<p>Do not always output assembly equivalent to the machine code you’d get from:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>cargo build <span class="nt">--release</span>
+</code></pre></div></div>
+
+<p>Possibly <code class="highlighter-rouge">rustc --emit=asm</code> has some uses, like examining a single file with
+no external dependencies, but it’s not useful for my normal case of wanting
+to look at the asm for an arbitrary release build.</p>
+
+<h2 id="the-long-version">The long version</h2>
+
+<p><a href="/2020/11/06/simd-ray-tracer.html">Previously</a> I rewrote my ray tracer
+to use <code class="highlighter-rouge">crossbeam::scope</code> and <code class="highlighter-rouge">crossbeam::queue</code> instead of rayon. Internally
+rayon leans heavily on <code class="highlighter-rouge">crossbeam::deque</code> for its work-stealing implementation, so
+my expectation was that this change would be neutral or a slight improvement, 
+depending on how good of a job the compiler had been doing to condense
+rayon’s abstractions.</p>
+
+<p>Instead it was a ~15% regression.</p>
+
+<h3 id="looking-at-the-asm-pt-1">Looking at the asm, pt. 1</h3>
+
+<p>The asm output appeared sane. I saw no expensive indirection, calls, etc. -
+things were getting properly inlined and optimized.</p>
+
+<h3 id="understanding-rayon">Understanding rayon</h3>
+
+<p>I first questioned my understanding of rayon and spent some time digging
+through its guts. It’s well-engineered, and it’s impressive that clang’s able
+to condense all of its abstractions down into basically no overhead - but I also
+didn’t see anything fundamentally novel or surprising going on that would give it a significant performance edge. The
+splitting/work assignment portion of the vec codepath looked like it would
+lead to slightly more even partitioning than my hand-built crossbeam method,
+but not by a lot, and definitely not by 15%. So that was bust. I did notice that
+crossbeam needed to heap allocate the closure I was using for my thread body,
+so perhaps that caused some additional overhead, but it should have been
+negligible.</p>
+
+<h3 id="cpu-profiling">CPU profiling</h3>
+
+<p>At this point I dumped both versions into Instruments and did some basic CPU
+profiling. rayon’s a bit annoying to poke around in because you end up with
+extremely deep stacks of <code class="highlighter-rouge">join</code> frames, but nothing really stood out. The
+crossbeam version was simply slower with no major red flags.</p>
+
+<h3 id="more-in-depth-cpu-profiling">More in-depth CPU profiling</h3>
+
+<p>I’d been looking for an excuse to try <a href="https://software.intel.com/content/www/us/en/develop/tools/vtune-profiler.html">Intel
+VTune</a>
+for awhile, but since it’s only supported on Windows and Linux and is best
+run on bare-metal, it had always been slightly too much effort to stand up
+for smaller projects. It seemed warranted for this one! I had an existing
+Windows bootcamp partition, so figured I’d see just how much hassle it was to
+get everything working in that before I dusted off something to run Linux.</p>
+
+<p>Sidebar: turns out Rust on Windows is… really nice. I’m not a Windows dev. There are
+things I admire about the ecosystem (like a good first-party
+debugger and some decent OS APIs), but apart from some Java way back in high
+school I’ve never even tried to compile software on a Windows machine. It
+always looked like a nightmare for C/C++ projects - I’m familiar enough with
+the code side of cross-platform support, but as for actually
+building things… I think cmake can spit out a Visual Studio project? And I
+keep hearing about WSL? So I went in with significant trepidation. Turns out
+it took all of ten minutes to install the VS C++ tools, rustup, a rust
+toolchain, vtune, and get everything building and working together. Pretty
+impressive.</p>
+
+<p>VTune itself is a complex beast. Most (all?) of the data in it is stuff you
+could get out of <code class="highlighter-rouge">perf</code>, but the collection and workflow is streamlined - it
+does a good job of keeping track of previous runs, grouping them in a way so
+you don’t lose anything, surfacing useful information based on top-level
+categories (eg. “I want to look at memory access”), and providing a 
+diff view between runs. It looks particularly useful for guiding iterative optimization
+and refinement. It’s a bit less useful when I’m comparing the
+performance of two fairly different programs, because many of the stack
+traces are unique to either the rayon or crossbeam version, so “you have 100%
+more of these rayon stack traces in this run” is not helpful. Looking through
+the data I saw that I was getting flagged on uarch perf, retiring
+instructions maybe 5% worse in the crossbeam version. Thinking that could be
+stalling waiting on memory, I ran a memory access profile and saw:</p>
+
+<p><img src="/assets/images/rrt/vtune_macc.png" alt="" /></p>
+
+<p>Crossbeam version is on the left, rayon version is on the right. Okay, 3s
+runtime difference - that’s commensurate with the perf regression I’m seeing.
+Interesting, we’re memory bound twice as frequently. That’s strange because
+our memory access pattern should be pretty similar. We’re doing over twice as
+many stores. We’re doing some additional loads. We’re…</p>
+
+<p>Wait.</p>
+
+<p>We’re doing over twice as many stores?! That doesn’t make sense.</p>
+
+<h3 id="replacing-crossbeamscope">Replacing crossbeam::scope</h3>
+
+<p>Perhaps heap allocating the closures was more expensive than I thought, or
+had bad knock-on effects. It’s a long shot, but the whole point of side
+projects is following some of those random tangents. I set about eliminating
+<code class="highlighter-rouge">crossbeam::scope</code> and using <code class="highlighter-rouge">std::thread</code> directly instead. This was a quick
+and dirty test: the entire point of <code class="highlighter-rouge">scope</code> is to create an abstraction that
+communicates to the borrow checker that threads we’ve spun off have been
+joined, otherwise it doesn’t know when a thread’s borrow is guaranteed to
+have ended and requires that data references from a thread’s closure are all
+static lifetime. In this case I’m manually joining the threads, so I can do a
+transmute to placate the compiler. Don’t ship code like this, it defeats the
+purpose of using Rust in the first place - you’d have a better experience
+with C++. But it can be really handy to circumvent these sorts of checks when
+doing quick prototyping/performance analysis to decide if it’s worth the time
+to build out a safe abstraction. I would welcome a “just build this without
+the borrow checker” mode for cases like this, though I’m probably in the
+minority and I don’t expect that would be an easy feature to add.</p>
+
+<p>My testing code looked roughly like this:</p>
+<div class="language-rust highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">let</span> <span class="n">pixels</span> <span class="o">=</span> <span class="k">unsafe</span> <span class="p">{</span> 
+    <span class="nn">mem</span><span class="p">::</span><span class="nn">transmute</span><span class="p">::</span><span class="o">&lt;&amp;</span><span class="k">mut</span> <span class="p">[</span><span class="n">V3</span><span class="p">],</span> <span class="o">&amp;</span><span class="nv">'static</span> <span class="k">mut</span> <span class="p">[</span><span class="n">V3</span><span class="p">]</span><span class="o">&gt;</span><span class="p">(</span><span class="n">pixels</span><span class="p">)</span>
+<span class="p">};</span>
+<span class="k">let</span> <span class="n">handle</span> <span class="o">=</span> <span class="nn">std</span><span class="p">::</span><span class="nn">thread</span><span class="p">::</span><span class="nf">spawn</span><span class="p">(</span><span class="k">move</span> <span class="p">||</span> <span class="p">{</span>
+    <span class="c">// code that uses &amp;pixels</span>
+<span class="p">});</span>
+<span class="n">handle</span><span class="nf">.join</span><span class="p">()</span><span class="nf">.unwrap</span><span class="p">();</span>
+</code></pre></div></div>
+
+<p>As expected, no significant performance gains were had.</p>
+
+<h3 id="looking-at-the-asm-pt-2">Looking at the asm, pt. 2…</h3>
+
+<p>Something isn’t adding up so I want to look at the assembly again, but I’d like to
+clearly distinguish between my unchanged business logic and the
+rayon/crossbeam coordination code. The majority of my business logic is
+behind a single function named <code class="highlighter-rouge">cast</code>; adding <code class="highlighter-rouge">#[inline(never)]</code> to that single ray processing function
+should give me a nice seam between rayon and my business logic.</p>
+
+<p>Build, run and the rayon version slows down… in fact it runs exactly as slow as the crossbeam
+version.</p>
+
+<p>I try adding <code class="highlighter-rouge">#[inline(always)]</code> to the <code class="highlighter-rouge">cast</code> function in the crossbeam
+version, and lo and behold it speeds up to match the original rayon version,
+my regression disappears.</p>
+
+<p>But, how’s that possible? The <em>first</em> thing I did was look at inlining. Maybe
+my quick once-over missed it, maybe I misread and this whole circuitous path
+is all my fault?</p>
+
+<p>I generated assembly output for both the inlined and noninlined versions of the crossbeam ray tracer:</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>rg ecl_rt4cast inline.s 
+21293:	.asciz	<span class="s2">"_ZN6ecl_rt4cast17hc1100eade04dff75E"</span>
+<span class="nv">$ </span>rg ecl_rt4cast noinline.s 
+21293:	.asciz	<span class="s2">"_ZN6ecl_rt4cast17hc1100eade04dff75E"</span>
+</code></pre></div></div>
+
+<p>I’m building release with symbols, so that string is expected. But neither
+version, not even the non-inlined version, is making calls to <code class="highlighter-rouge">cast()</code>.
+Curious.</p>
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span><span class="nb">wc</span> <span class="nt">-l</span> inline.s 
+203969 inline.s
+<span class="nv">$ </span><span class="nb">wc</span> <span class="nt">-l</span> noinline.s 
+203969 noinline.s
+</code></pre></div></div>
+
+<p>Now I feel like I’m being gaslighted. These are the exact same length. A diff
+shows that the only changes are some arbitrary IDs in debug info. I have a
+difficult relationship with optimizing compilers, so my first thought is maybe
+clang’s being clang again and I should go validate the binaries instead…</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nv">$ </span>objdump <span class="nt">-d</span> ecl_rt_inline | rg ecl_rt4cast
+&lt;no output&gt;
+<span class="nv">$ </span>objdump <span class="nt">-d</span> ecl_rt_noinline | rg ecl_rt4cast
+0000000100003190 __ZN6ecl_rt4cast17hc1100eade04dff75E:
+100003299: e9 af 01 00 00              	jmp	431 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x2bd&gt;
+1000034a2: eb 1f                       	jmp	31 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x333&gt;
+1000034c6: 74 38                       	je	56 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x370&gt;
+1000034e5: 0f 82 f5 00 00 00           	jb	245 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&gt;
+1000034ee: 72 1d                       	jb	29 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x37d&gt;
+1000034f0: e9 eb 00 00 00              	jmp	235 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&gt;
+100003503: 0f 83 d7 00 00 00           	jae	215 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&gt;
+100003515: 0f 87 16 03 00 00           	ja	790 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6a1&gt;
+10000351e: 0f 82 1f 03 00 00           	jb	799 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6b3&gt;
+100003527: 0f 82 2b 03 00 00           	jb	811 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6c8&gt;
+100003530: 0f 82 37 03 00 00           	jb	823 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6dd&gt;
+100003539: 0f 82 40 03 00 00           	jb	832 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6ef&gt;
+100003590: 0f 84 1a ff ff ff           	je	<span class="nt">-230</span> &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x320&gt;
+1000035db: e9 d0 fe ff ff              	jmp	<span class="nt">-304</span> &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x320&gt;
+10000360a: 0f 86 a1 01 00 00           	jbe	417 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x621&gt;
+100003637: 0f 87 57 02 00 00           	ja	599 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x704&gt;
+100003668: 0f 86 3d 02 00 00           	jbe	573 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x71b&gt;
+100003682: 0f 84 41 01 00 00           	je	321 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x639&gt;
+100003707: 0f 85 93 fb ff ff           	jne	<span class="nt">-1133</span> &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x110&gt;
+10000371a: 0f 86 9f 01 00 00           	jbe	415 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x72f&gt;
+100003723: 0f 86 a8 01 00 00           	jbe	424 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x741&gt;
+10000372c: 0f 86 b1 01 00 00           	jbe	433 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x753&gt;
+1000037ac: e9 57 <span class="nb">fc </span>ff ff              	jmp	<span class="nt">-937</span> &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x278&gt;
+1000037c7: eb 12                       	jmp	18 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x64b&gt;
+100009740: e8 4b 9a ff ff              	callq	<span class="nt">-26037</span> &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E&gt;
+</code></pre></div></div>
+
+<p>Bingo - note the <code class="highlighter-rouge">callq</code>. Clearly my crossbeam version wasn’t inlining as
+aggresively as the rayon version, possibly due to the <code class="highlighter-rouge">Box::new(closure)</code>.
+Instructing the compiler to do so brought performance in line with
+expectations. It’s silly that the compiler wasn’t inlining it in the first
+place, this function has a single callsite and inlining it improves both
+runtime performance and binary size.</p>
+
+<p>That means <code class="highlighter-rouge">--emit=asm</code> does something entirely unexpected. I dug around and sure enough <a href="https://users.rust-lang.org/t/emit-asm-changes-the-produced-machine-code/17701/4">there are
+reports</a>
+that running with <code class="highlighter-rouge">--emit=asm</code> will build with a different configuration due
+to interaction with ThinLTO and codegen units.</p>
+
+<h3 id="fin">Fin</h3>
+
+<p>It’s not ideal to rely on disassemblers because they’re also fallible. In the
+same way that going from C to asm loses fidelity and makes decompiling from
+asm to C difficult, going from asm to machine code also loses fidelity and
+there can be inconsistenices when disassembling machine code back into asm.</p>
+
+<p>The common disassemblers like <code class="highlighter-rouge">objdump</code> are linear sweep and can suffer from
+mistaking data for code. There’s another family of disassemblers based on
+recursive traversal that avoid those problems, but come with their own set of
+tradeoffs.</p>
+
+<p>Note that the learning curve on disassemblers can be steep. These tools are
+often packaged into a suite and targeted towards reverse engineering and
+malware analysis, they come with far more features than “give me a good
+disassembly and make it easy to visualize/browse.” Hopefully it’ll be easier
+to match the <code class="highlighter-rouge">--emit=asm</code> build config to a normal release build config in
+the future, but until then I’ll be getting comfortable with
+<a href="https://ghidra-sre.org">Ghidra</a>.</p>
+
+  </div>
+
+  <a class="u-url" href="/2020/11/09/rust-emit-asm.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1"><a class="u-email" href="mailto:eli@siliconsprawl.com">eli@siliconsprawl.com</a></div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/elindsey"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a href="https://www.linkedin.com/in/elilind"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#linkedin"></use></svg></a></li><li><a href="/feed.xml"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
+

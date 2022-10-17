@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo="><!-- Begin Jekyll SEO tag v2.6.1 -->
+<title>Network Programming Self-Study | silicon_sprawl_</title>
+<meta name="generator" content="Jekyll v4.0.1" />
+<meta property="og:title" content="Network Programming Self-Study" />
+<meta name="author" content="Eli Lindsey" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Lately I’ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it." />
+<meta property="og:description" content="Lately I’ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it." />
+<link rel="canonical" href="https://siliconsprawl.com/2020/05/10/network-programming-self-study.html" />
+<meta property="og:url" content="https://siliconsprawl.com/2020/05/10/network-programming-self-study.html" />
+<meta property="og:site_name" content="silicon_sprawl_" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-05-10T00:00:00+00:00" />
+<script type="application/ld+json">
+{"datePublished":"2020-05-10T00:00:00+00:00","author":{"@type":"Person","name":"Eli Lindsey"},"description":"Lately I’ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.","url":"https://siliconsprawl.com/2020/05/10/network-programming-self-study.html","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://siliconsprawl.com/2020/05/10/network-programming-self-study.html"},"headline":"Network Programming Self-Study","dateModified":"2020-05-10T00:00:00+00:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://siliconsprawl.com/feed.xml" title="silicon_sprawl_" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">silicon_sprawl_</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about.html">about</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Network Programming Self-Study</h1>
+    <p class="post-meta"></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>Lately I’ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.</p>
+
+<p>I’ve been in this space ten years now, working across layers 3 to 7 on CDNs, DNS, and protocol stacks at a couple of FAANGs and a startup. If you name a piece of software that runs in an edge network, I’ve probably seen one (or three) versions of it.</p>
+
+<p>Advice is tricky. It’s easy to turn things I learned into Things Everyone Should Learn. It’s also easy to fit an inaccurate narrative to a path, to recast something as a logical progression when it was really blind stumbling around. 
+I could spin a yarn about how networking was the first thing I did with computers, how I did a CCNA in high-school and something something destiny. But I could also tell the story of how I did that CCNA primarily to get out of taking PE, and how I found my college networking class so tedious that I dropped it in the first week and never tried again (for some inexplicable reason it was an optional elective at my university).</p>
+
+<p>I’ll avoid all that - I don’t think my exact career path is all that interesting. But I’ll offer one piece of advice (because I can’t entirely resist), and a handful of books that I’ve found useful and interesting (because too many are not both). If the advice doesn’t resonate, ignore it. If a book seems boring, skip it.</p>
+
+<h3 id="general-advice">General Advice</h3>
+
+<p>Networks are not a pure, abstract technology. Honestly nothing is, but networks in particular are physical, temporal things. They exist in a certain place at a certain time, influenced by people, technology, nature, and politics.</p>
+
+<p>You will be a better developer if you involve yourself in the reality of networking.  Follow NANOG, OARC, or other lists where operators hang out, try to understand the discussion, their mindsets and biases. Pay attention to things, and pay attention <em>as they are happening</em>. If there’s an operational event or outage, follow it, attempt to debug as it unfolds, then later compare notes with whoever was working it. Working on something independently until you get stuck and then articulating exactly what you’re stuck on is one of the most useful skills you can develop, and working events in realtime is a great way to practice.</p>
+
+<h3 id="networking-resources">Networking Resources</h3>
+
+<ol>
+  <li><a href="https://hpbn.co">High Performance Browser Networking</a> - this is an excellent crash course on protcols and browsers. This is 90% of what most software developers need to know about networking. It’s available for free online.</li>
+  <li><a href="https://www.amazon.com/Interconnections-Bridges-Switches-Internetworking-Protocols/dp/0201634481">Interconnections</a> - this is my favorite resource for learning about routing protocols. Perlman is extremely accomplished in the field <em>and</em> has an accessible writing style. A few newer protocols are missing, but this will give you the necessary background to pick those up easily. It’s very affordable since it’s an older book.</li>
+  <li><a href="https://www.amazon.com/Network-Routing-Algorithms-Architectures-Networking-ebook/dp/B075H8ZPZK">Network Routing</a> - I only recommend this for the chapter on hardware, and possibly the chapter on label switching. It has a great overview of how a physical router is put together and works, but most of the book is dry and nowhere near as engaging as Perlman. Unfortunately it is an expensive text; borrow it if you can.</li>
+  <li><a href="http://drpeering.net/core/bookOutline.html">The Internet Peering Playbook</a> - this book is all about the people/business side of how the Internet functions. It’s a fascinating read and even if you don’t work in the space will help you understand the dynamics of eg. cable companies, large Internet players, etc. The physical book is impossible to obtain, but the Kindle edition is inexpensive and much of the content is available for free on the DrPeering site.</li>
+</ol>
+
+<h3 id="systems-programming-resources">Systems Programming Resources</h3>
+
+<p>Network programming is a form of systems programming. There are certain systems programming resources that I consider indispensible. These are generally not books to go buy all at once and read cover to cover (though you could!), but if there are specific topics you need to understand in more depth - say, lock-free datastructures or sockets or epoll - then this is where you go first. Internet resources are woefully inaccurate or out of date on many of these topics.</p>
+
+<ol>
+  <li><a href="https://mirrors.edge.kernel.org/pub/linux/kernel/people/paulmck/perfbook/perfbook.html">Perfbook</a> - this is the primary resource for anything related to parallel programming. CPU architecture, memory access semantics, threads, locks, atomics, RCU, hazard pointers, parallel data structures. It’s a phenomenal resource, freely available and frequently updated.</li>
+  <li><a href="https://www.amazon.com/Computer-Systems-Programmers-Perspective-3rd/dp/013409266X">Computer Systems: A Programmer’s Perspective</a> - this is a good first stop for any hardware or systems questions. Things like how does virtual memory work, how does a linker work, and so on. Often if you need more depth it will only serve as a jumping off point to relevant OS or CPU manuals, but I still find it valuable. Unfortunately it’s quite expensive since it’s a current textbook.</li>
+  <li><a href="https://www.amazon.com/Linux-Programming-Interface-System-Handbook-ebook/dp/B004OEJMZM">The Linux Programming Interface</a> - in the tradition of <em>The Unix Programming Environment</em> and <em>TCP/IP Illustrated</em>, this is my preferred one-stop shop for Linux APIs. Lucid, in-depth writing, broad coverage.</li>
+  <li><a href="https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg-ebook/dp/B00FLYU9T2/">Systems Performance</a> - you will need to think about performance, it comes with the territory. This is the book to read on performance. Also, check out Brendan Gregg’s blog, talks, and more recent work on BPF.</li>
+</ol>
+
+<h3 id="project-ideas">Project Ideas</h3>
+
+<ol>
+  <li>
+    <p>Read the DNS RFCs and implement either a stub resolver or an authoritative server in your language of choice. Start with a few record types and expand as long as you’re interested. Use wireshark to view the traffic and debug.</p>
+
+    <p>You’ll eventually need to learn how to read RFCs, and the original DNS RFCs are straightforward. DNS isn’t encrypted so you’ll have an easy time sniffing your traffic during development. Best of all, it’s exciting getting a piece of software you wrote interacting with something you didn’t write - either using your stub resolver to query a public DNS server, or using dig/unbound to query your authoritative server. DNS is fun.</p>
+  </li>
+  <li>
+    <p>Play with a lab network. This doesn’t need to be a physical lab - <a href="https://www.gns3.com">GNS3</a> with <a href="https://www.vyos.io">VyOS</a>, <a href="https://wiki.mikrotik.com/wiki/Manual:CHR">MikroTik</a>, or any Linux distro running <a href="https://frrouting.org">FRRouting</a> makes a great environment for experimentation. You can build a complex network environment, packet sniff every single link to see how routers are communicating, and drop a container or VM running your own network software into the mix. If you need a goal, try setting up two separate ASes, one running IS-IS and one running OSPF. Model an Internet exchange and have them peer.</p>
+  </li>
+</ol>
+
+<h3 id="tangent-languages">Tangent: Languages</h3>
+
+<p>I’m going to avoid languages except for one note: you’ll need to know C, even if it’s just enough to read others’ code. There are plenty of ways to learn it, but I’d recommend <a href="https://modernc.gforge.inria.fr">Modern C</a>. I have some minor nits with the book, but it’s a high-quality, concise, freely available text that covers all the language features you need to know and points out many of the problematic areas.</p>
+
+<p>C is a simple language. It doesn’t benefit from reading many books or tutorials. Most of the complexity lies in working with memory and dealing with optimizing compilers, so you must use it to understand it.</p>
+
+<p>If you want a starter C project, try implementing malloc. You’ll learn about virtual memory, commited versus reserved pages, fragmentation, and how to write fast software. You’ll also gain an understanding of how even simple looking C stdlib functions hide significant complexity (try to imagine what complexity a higher level langauge hides). When you’re done, read about tcmalloc or jemalloc and compare notes. Run your code under asan and ubsan to find bugs.</p>
+
+<h3 id="the-end">The End</h3>
+
+<p>Good luck and have fun!</p>
+
+<h3 id="addenda">Addenda</h3>
+
+<p>Most people will get the DNS knowledge they need from the books listed in the Networking Resources section. But if you want significantly more depth (eg. if you’re starting a new job at a DNS company) then I recommend <a href="https://www.amazon.com/Managing-Mission-Critical-Demystifying-nameservers-ebook/dp/B07F71QMFM">Managing Mission-Critical Domains and DNS</a>. I like that it covers the entire ecosystem - registrars, WHOIS, DNS, DNSSEC, some major open-source implementations, and even touches on operations/DDOS.</p>
+
+  </div>
+
+  <a class="u-url" href="/2020/05/10/network-programming-self-study.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1"><a class="u-email" href="mailto:eli@siliconsprawl.com">eli@siliconsprawl.com</a></div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/elindsey"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a href="https://www.linkedin.com/in/elilind"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#linkedin"></use></svg></a></li><li><a href="/feed.xml"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
+

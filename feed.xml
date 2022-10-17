@@ -1,0 +1,1126 @@
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="4.0.1">Jekyll</generator><link href="https://siliconsprawl.com/feed.xml" rel="self" type="application/atom+xml" /><link href="https://siliconsprawl.com/" rel="alternate" type="text/html" /><updated>2022-10-17T15:28:02+00:00</updated><id>https://siliconsprawl.com/feed.xml</id><title type="html">silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title type="html">Rust emit=asm Can Be Misleading</title><link href="https://siliconsprawl.com/2020/11/09/rust-emit-asm.html" rel="alternate" type="text/html" title="Rust emit=asm Can Be Misleading" /><published>2020-11-09T00:00:00+00:00</published><updated>2020-11-09T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/11/09/rust-emit-asm</id><content type="html" xml:base="https://siliconsprawl.com/2020/11/09/rust-emit-asm.html">&lt;h2 id=&quot;the-short-version&quot;&gt;The short version&lt;/h2&gt;
+
+&lt;p&gt;Cargo builds like:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ RUSTFLAGS&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;=&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&quot;--emit asm&quot;&lt;/span&gt; cargo build &lt;span class=&quot;nt&quot;&gt;--release&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;cargo rustc &lt;span class=&quot;nt&quot;&gt;--release&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;--emit&lt;/span&gt; asm
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Do not always output assembly equivalent to the machine code you’d get from:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;cargo build &lt;span class=&quot;nt&quot;&gt;--release&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Possibly &lt;code class=&quot;highlighter-rouge&quot;&gt;rustc --emit=asm&lt;/code&gt; has some uses, like examining a single file with
+no external dependencies, but it’s not useful for my normal case of wanting
+to look at the asm for an arbitrary release build.&lt;/p&gt;
+
+&lt;h2 id=&quot;the-long-version&quot;&gt;The long version&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;/2020/11/06/simd-ray-tracer.html&quot;&gt;Previously&lt;/a&gt; I rewrote my ray tracer
+to use &lt;code class=&quot;highlighter-rouge&quot;&gt;crossbeam::scope&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;crossbeam::queue&lt;/code&gt; instead of rayon. Internally
+rayon leans heavily on &lt;code class=&quot;highlighter-rouge&quot;&gt;crossbeam::deque&lt;/code&gt; for its work-stealing implementation, so
+my expectation was that this change would be neutral or a slight improvement, 
+depending on how good of a job the compiler had been doing to condense
+rayon’s abstractions.&lt;/p&gt;
+
+&lt;p&gt;Instead it was a ~15% regression.&lt;/p&gt;
+
+&lt;h3 id=&quot;looking-at-the-asm-pt-1&quot;&gt;Looking at the asm, pt. 1&lt;/h3&gt;
+
+&lt;p&gt;The asm output appeared sane. I saw no expensive indirection, calls, etc. -
+things were getting properly inlined and optimized.&lt;/p&gt;
+
+&lt;h3 id=&quot;understanding-rayon&quot;&gt;Understanding rayon&lt;/h3&gt;
+
+&lt;p&gt;I first questioned my understanding of rayon and spent some time digging
+through its guts. It’s well-engineered, and it’s impressive that clang’s able
+to condense all of its abstractions down into basically no overhead - but I also
+didn’t see anything fundamentally novel or surprising going on that would give it a significant performance edge. The
+splitting/work assignment portion of the vec codepath looked like it would
+lead to slightly more even partitioning than my hand-built crossbeam method,
+but not by a lot, and definitely not by 15%. So that was bust. I did notice that
+crossbeam needed to heap allocate the closure I was using for my thread body,
+so perhaps that caused some additional overhead, but it should have been
+negligible.&lt;/p&gt;
+
+&lt;h3 id=&quot;cpu-profiling&quot;&gt;CPU profiling&lt;/h3&gt;
+
+&lt;p&gt;At this point I dumped both versions into Instruments and did some basic CPU
+profiling. rayon’s a bit annoying to poke around in because you end up with
+extremely deep stacks of &lt;code class=&quot;highlighter-rouge&quot;&gt;join&lt;/code&gt; frames, but nothing really stood out. The
+crossbeam version was simply slower with no major red flags.&lt;/p&gt;
+
+&lt;h3 id=&quot;more-in-depth-cpu-profiling&quot;&gt;More in-depth CPU profiling&lt;/h3&gt;
+
+&lt;p&gt;I’d been looking for an excuse to try &lt;a href=&quot;https://software.intel.com/content/www/us/en/develop/tools/vtune-profiler.html&quot;&gt;Intel
+VTune&lt;/a&gt;
+for awhile, but since it’s only supported on Windows and Linux and is best
+run on bare-metal, it had always been slightly too much effort to stand up
+for smaller projects. It seemed warranted for this one! I had an existing
+Windows bootcamp partition, so figured I’d see just how much hassle it was to
+get everything working in that before I dusted off something to run Linux.&lt;/p&gt;
+
+&lt;p&gt;Sidebar: turns out Rust on Windows is… really nice. I’m not a Windows dev. There are
+things I admire about the ecosystem (like a good first-party
+debugger and some decent OS APIs), but apart from some Java way back in high
+school I’ve never even tried to compile software on a Windows machine. It
+always looked like a nightmare for C/C++ projects - I’m familiar enough with
+the code side of cross-platform support, but as for actually
+building things… I think cmake can spit out a Visual Studio project? And I
+keep hearing about WSL? So I went in with significant trepidation. Turns out
+it took all of ten minutes to install the VS C++ tools, rustup, a rust
+toolchain, vtune, and get everything building and working together. Pretty
+impressive.&lt;/p&gt;
+
+&lt;p&gt;VTune itself is a complex beast. Most (all?) of the data in it is stuff you
+could get out of &lt;code class=&quot;highlighter-rouge&quot;&gt;perf&lt;/code&gt;, but the collection and workflow is streamlined - it
+does a good job of keeping track of previous runs, grouping them in a way so
+you don’t lose anything, surfacing useful information based on top-level
+categories (eg. “I want to look at memory access”), and providing a 
+diff view between runs. It looks particularly useful for guiding iterative optimization
+and refinement. It’s a bit less useful when I’m comparing the
+performance of two fairly different programs, because many of the stack
+traces are unique to either the rayon or crossbeam version, so “you have 100%
+more of these rayon stack traces in this run” is not helpful. Looking through
+the data I saw that I was getting flagged on uarch perf, retiring
+instructions maybe 5% worse in the crossbeam version. Thinking that could be
+stalling waiting on memory, I ran a memory access profile and saw:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/vtune_macc.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Crossbeam version is on the left, rayon version is on the right. Okay, 3s
+runtime difference - that’s commensurate with the perf regression I’m seeing.
+Interesting, we’re memory bound twice as frequently. That’s strange because
+our memory access pattern should be pretty similar. We’re doing over twice as
+many stores. We’re doing some additional loads. We’re…&lt;/p&gt;
+
+&lt;p&gt;Wait.&lt;/p&gt;
+
+&lt;p&gt;We’re doing over twice as many stores?! That doesn’t make sense.&lt;/p&gt;
+
+&lt;h3 id=&quot;replacing-crossbeamscope&quot;&gt;Replacing crossbeam::scope&lt;/h3&gt;
+
+&lt;p&gt;Perhaps heap allocating the closures was more expensive than I thought, or
+had bad knock-on effects. It’s a long shot, but the whole point of side
+projects is following some of those random tangents. I set about eliminating
+&lt;code class=&quot;highlighter-rouge&quot;&gt;crossbeam::scope&lt;/code&gt; and using &lt;code class=&quot;highlighter-rouge&quot;&gt;std::thread&lt;/code&gt; directly instead. This was a quick
+and dirty test: the entire point of &lt;code class=&quot;highlighter-rouge&quot;&gt;scope&lt;/code&gt; is to create an abstraction that
+communicates to the borrow checker that threads we’ve spun off have been
+joined, otherwise it doesn’t know when a thread’s borrow is guaranteed to
+have ended and requires that data references from a thread’s closure are all
+static lifetime. In this case I’m manually joining the threads, so I can do a
+transmute to placate the compiler. Don’t ship code like this, it defeats the
+purpose of using Rust in the first place - you’d have a better experience
+with C++. But it can be really handy to circumvent these sorts of checks when
+doing quick prototyping/performance analysis to decide if it’s worth the time
+to build out a safe abstraction. I would welcome a “just build this without
+the borrow checker” mode for cases like this, though I’m probably in the
+minority and I don’t expect that would be an easy feature to add.&lt;/p&gt;
+
+&lt;p&gt;My testing code looked roughly like this:&lt;/p&gt;
+&lt;div class=&quot;language-rust highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;pixels&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;unsafe&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; 
+    &lt;span class=&quot;nn&quot;&gt;mem&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;nn&quot;&gt;transmute&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;mut&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;V3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;],&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;nv&quot;&gt;'static&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;mut&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;V3&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pixels&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;let&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;handle&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;nn&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;nn&quot;&gt;thread&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;spawn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;k&quot;&gt;move&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c&quot;&gt;// code that uses &amp;amp;pixels&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;});&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;handle&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;.join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;&lt;span class=&quot;nf&quot;&gt;.unwrap&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;();&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;As expected, no significant performance gains were had.&lt;/p&gt;
+
+&lt;h3 id=&quot;looking-at-the-asm-pt-2&quot;&gt;Looking at the asm, pt. 2…&lt;/h3&gt;
+
+&lt;p&gt;Something isn’t adding up so I want to look at the assembly again, but I’d like to
+clearly distinguish between my unchanged business logic and the
+rayon/crossbeam coordination code. The majority of my business logic is
+behind a single function named &lt;code class=&quot;highlighter-rouge&quot;&gt;cast&lt;/code&gt;; adding &lt;code class=&quot;highlighter-rouge&quot;&gt;#[inline(never)]&lt;/code&gt; to that single ray processing function
+should give me a nice seam between rayon and my business logic.&lt;/p&gt;
+
+&lt;p&gt;Build, run and the rayon version slows down… in fact it runs exactly as slow as the crossbeam
+version.&lt;/p&gt;
+
+&lt;p&gt;I try adding &lt;code class=&quot;highlighter-rouge&quot;&gt;#[inline(always)]&lt;/code&gt; to the &lt;code class=&quot;highlighter-rouge&quot;&gt;cast&lt;/code&gt; function in the crossbeam
+version, and lo and behold it speeds up to match the original rayon version,
+my regression disappears.&lt;/p&gt;
+
+&lt;p&gt;But, how’s that possible? The &lt;em&gt;first&lt;/em&gt; thing I did was look at inlining. Maybe
+my quick once-over missed it, maybe I misread and this whole circuitous path
+is all my fault?&lt;/p&gt;
+
+&lt;p&gt;I generated assembly output for both the inlined and noninlined versions of the crossbeam ray tracer:&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;rg ecl_rt4cast inline.s 
+21293:	.asciz	&lt;span class=&quot;s2&quot;&gt;&quot;_ZN6ecl_rt4cast17hc1100eade04dff75E&quot;&lt;/span&gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;rg ecl_rt4cast noinline.s 
+21293:	.asciz	&lt;span class=&quot;s2&quot;&gt;&quot;_ZN6ecl_rt4cast17hc1100eade04dff75E&quot;&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;I’m building release with symbols, so that string is expected. But neither
+version, not even the non-inlined version, is making calls to &lt;code class=&quot;highlighter-rouge&quot;&gt;cast()&lt;/code&gt;.
+Curious.&lt;/p&gt;
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;wc&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; inline.s 
+203969 inline.s
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;&lt;span class=&quot;nb&quot;&gt;wc&lt;/span&gt; &lt;span class=&quot;nt&quot;&gt;-l&lt;/span&gt; noinline.s 
+203969 noinline.s
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Now I feel like I’m being gaslighted. These are the exact same length. A diff
+shows that the only changes are some arbitrary IDs in debug info. I have a
+difficult relationship with optimizing compilers, so my first thought is maybe
+clang’s being clang again and I should go validate the binaries instead…&lt;/p&gt;
+
+&lt;div class=&quot;language-bash highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;objdump &lt;span class=&quot;nt&quot;&gt;-d&lt;/span&gt; ecl_rt_inline | rg ecl_rt4cast
+&amp;lt;no output&amp;gt;
+&lt;span class=&quot;nv&quot;&gt;$ &lt;/span&gt;objdump &lt;span class=&quot;nt&quot;&gt;-d&lt;/span&gt; ecl_rt_noinline | rg ecl_rt4cast
+0000000100003190 __ZN6ecl_rt4cast17hc1100eade04dff75E:
+100003299: e9 af 01 00 00              	jmp	431 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x2bd&amp;gt;
+1000034a2: eb 1f                       	jmp	31 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x333&amp;gt;
+1000034c6: 74 38                       	je	56 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x370&amp;gt;
+1000034e5: 0f 82 f5 00 00 00           	jb	245 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&amp;gt;
+1000034ee: 72 1d                       	jb	29 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x37d&amp;gt;
+1000034f0: e9 eb 00 00 00              	jmp	235 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&amp;gt;
+100003503: 0f 83 d7 00 00 00           	jae	215 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&amp;gt;
+100003515: 0f 87 16 03 00 00           	ja	790 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6a1&amp;gt;
+10000351e: 0f 82 1f 03 00 00           	jb	799 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6b3&amp;gt;
+100003527: 0f 82 2b 03 00 00           	jb	811 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6c8&amp;gt;
+100003530: 0f 82 37 03 00 00           	jb	823 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6dd&amp;gt;
+100003539: 0f 82 40 03 00 00           	jb	832 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6ef&amp;gt;
+100003590: 0f 84 1a ff ff ff           	je	&lt;span class=&quot;nt&quot;&gt;-230&lt;/span&gt; &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x320&amp;gt;
+1000035db: e9 d0 fe ff ff              	jmp	&lt;span class=&quot;nt&quot;&gt;-304&lt;/span&gt; &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x320&amp;gt;
+10000360a: 0f 86 a1 01 00 00           	jbe	417 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x621&amp;gt;
+100003637: 0f 87 57 02 00 00           	ja	599 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x704&amp;gt;
+100003668: 0f 86 3d 02 00 00           	jbe	573 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x71b&amp;gt;
+100003682: 0f 84 41 01 00 00           	je	321 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x639&amp;gt;
+100003707: 0f 85 93 fb ff ff           	jne	&lt;span class=&quot;nt&quot;&gt;-1133&lt;/span&gt; &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x110&amp;gt;
+10000371a: 0f 86 9f 01 00 00           	jbe	415 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x72f&amp;gt;
+100003723: 0f 86 a8 01 00 00           	jbe	424 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x741&amp;gt;
+10000372c: 0f 86 b1 01 00 00           	jbe	433 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x753&amp;gt;
+1000037ac: e9 57 &lt;span class=&quot;nb&quot;&gt;fc &lt;/span&gt;ff ff              	jmp	&lt;span class=&quot;nt&quot;&gt;-937&lt;/span&gt; &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x278&amp;gt;
+1000037c7: eb 12                       	jmp	18 &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x64b&amp;gt;
+100009740: e8 4b 9a ff ff              	callq	&lt;span class=&quot;nt&quot;&gt;-26037&lt;/span&gt; &amp;lt;__ZN6ecl_rt4cast17hc1100eade04dff75E&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Bingo - note the &lt;code class=&quot;highlighter-rouge&quot;&gt;callq&lt;/code&gt;. Clearly my crossbeam version wasn’t inlining as
+aggresively as the rayon version, possibly due to the &lt;code class=&quot;highlighter-rouge&quot;&gt;Box::new(closure)&lt;/code&gt;.
+Instructing the compiler to do so brought performance in line with
+expectations. It’s silly that the compiler wasn’t inlining it in the first
+place, this function has a single callsite and inlining it improves both
+runtime performance and binary size.&lt;/p&gt;
+
+&lt;p&gt;That means &lt;code class=&quot;highlighter-rouge&quot;&gt;--emit=asm&lt;/code&gt; does something entirely unexpected. I dug around and sure enough &lt;a href=&quot;https://users.rust-lang.org/t/emit-asm-changes-the-produced-machine-code/17701/4&quot;&gt;there are
+reports&lt;/a&gt;
+that running with &lt;code class=&quot;highlighter-rouge&quot;&gt;--emit=asm&lt;/code&gt; will build with a different configuration due
+to interaction with ThinLTO and codegen units.&lt;/p&gt;
+
+&lt;h3 id=&quot;fin&quot;&gt;Fin&lt;/h3&gt;
+
+&lt;p&gt;It’s not ideal to rely on disassemblers because they’re also fallible. In the
+same way that going from C to asm loses fidelity and makes decompiling from
+asm to C difficult, going from asm to machine code also loses fidelity and
+there can be inconsistenices when disassembling machine code back into asm.&lt;/p&gt;
+
+&lt;p&gt;The common disassemblers like &lt;code class=&quot;highlighter-rouge&quot;&gt;objdump&lt;/code&gt; are linear sweep and can suffer from
+mistaking data for code. There’s another family of disassemblers based on
+recursive traversal that avoid those problems, but come with their own set of
+tradeoffs.&lt;/p&gt;
+
+&lt;p&gt;Note that the learning curve on disassemblers can be steep. These tools are
+often packaged into a suite and targeted towards reverse engineering and
+malware analysis, they come with far more features than “give me a good
+disassembly and make it easy to visualize/browse.” Hopefully it’ll be easier
+to match the &lt;code class=&quot;highlighter-rouge&quot;&gt;--emit=asm&lt;/code&gt; build config to a normal release build config in
+the future, but until then I’ll be getting comfortable with
+&lt;a href=&quot;https://ghidra-sre.org&quot;&gt;Ghidra&lt;/a&gt;.&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">The short version</summary></entry><entry><title type="html">Rust Ray Tracer, an Update (and SIMD)</title><link href="https://siliconsprawl.com/2020/11/06/simd-ray-tracer.html" rel="alternate" type="text/html" title="Rust Ray Tracer, an Update (and SIMD)" /><published>2020-11-06T00:00:00+00:00</published><updated>2020-11-06T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/11/06/simd-ray-tracer</id><content type="html" xml:base="https://siliconsprawl.com/2020/11/06/simd-ray-tracer.html">&lt;p&gt;About &lt;a href=&quot;/2020/09/27/rust-ray-tracer.html&quot;&gt;a month ago&lt;/a&gt; I ported my C99 ray
+tracer side project to Rust. The initial port went smoothly, and I’ve now
+been plugging away adding features and repeatedly rewriting it in my spare hours.
+In parallel I’m getting up to speed on a large, production Rust codebase at work.
+The contrast between the two has been interesting - I have almost
+entirely positive things to say about Rust for large, multi-threaded
+codebases, but it hasn’t been as good of a fit for the ray tracer.&lt;/p&gt;
+
+&lt;p&gt;It’s not a &lt;em&gt;bad&lt;/em&gt; fit, but C/C++ are almost perfectly suited for this domain. Many of
+Rust’s flagship features aren’t applicable and/or get in the way - for
+example, the borrow checker doesn’t get me anything that ASAN wouldn’t in
+this specific use case, though does cause some additional headaches.&lt;/p&gt;
+
+&lt;p&gt;What follows are a few of the quirks I’ve come across.&lt;/p&gt;
+
+&lt;h2 id=&quot;overhead-of-thread-locals&quot;&gt;Overhead of Thread Locals&lt;/h2&gt;
+
+&lt;p&gt;There was a &lt;a href=&quot;https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html&quot;&gt;recent blog post&lt;/a&gt;
+about this, so I won’t get into it very much.&lt;/p&gt;
+
+&lt;p&gt;Suffice to say that thread locals in C already have more overhead than I’d
+like since they introduce a level of indirection on use, and the additional
+overhead of lazy initialization is significant. I found myself golfing down
+TLS access whereever possible (“I’ll persist this in TLS, but copy it out
+to/write it back from the stack”).&lt;/p&gt;
+
+&lt;p&gt;Nightly has &lt;a href=&quot;https://github.com/rust-lang/rust/issues/29594&quot;&gt;an attribute&lt;/a&gt;
+that can be used to get a barebones thread local, but I’m trying to avoid
+nightly if possible.&lt;/p&gt;
+
+&lt;p&gt;Ultimately I got rid of TLS use entirely, but it meant moving away from rayon.&lt;/p&gt;
+
+&lt;h2 id=&quot;difficulty-of-expressing-mutable-array-access&quot;&gt;Difficulty of expressing mutable array access&lt;/h2&gt;
+
+&lt;p&gt;At its core a ray tracer is a giant array of pixels. You read a
+pixel, do some math, and write it back. This is trivial to parallelize by
+assigning disjoint sets of indices to threads, but often ends up being a
+little difficult to express in Rust. In particular, non-contiguous,
+cross-thread write access seems impossible to model safely without doing a
+copy pass over the array (ie. using split to slice it up into contiguous owned
+chunks, then later copying/rearranging it into the required non-contiguous order).&lt;/p&gt;
+
+&lt;p&gt;This makes it a bit annoying to write a tile-based instead of row or pixel-based tracer.&lt;/p&gt;
+
+&lt;h2 id=&quot;undefined-undefined-behavior&quot;&gt;‘Undefined’ Undefined Behavior&lt;/h2&gt;
+
+&lt;p&gt;I’ve found it hard to tell what is and isn’t undefined behavior in Rust.
+There’s the &lt;a href=&quot;https://doc.rust-lang.org/nomicon/&quot;&gt;Rustonomicon&lt;/a&gt;, but it’s
+sparse in places. In particular, I don’t have a good feel for what transmutes
+are and aren’t safe. One route is to outsource all that concern to something
+like &lt;a href=&quot;https://crates.io/crates/bytemuck&quot;&gt;bytemuck&lt;/a&gt; and let
+&lt;a href=&quot;https://github.com/Lokathor&quot;&gt;Lokathor&lt;/a&gt; worry about it. But for this project
+I’ve been avoiding taking deps unless completely necessary, because…&lt;/p&gt;
+
+&lt;h2 id=&quot;compilation-speed&quot;&gt;Compilation speed&lt;/h2&gt;
+
+&lt;p&gt;…compilation speed is atrocious. My work builds take an ungodly amount of
+time. I’ve been very picky about dependent libraries to keep this ray
+tracer’s incremental build as low as possible.&lt;/p&gt;
+
+&lt;h2 id=&quot;operator-overloading-and-numeric-traits&quot;&gt;Operator overloading and numeric traits&lt;/h2&gt;
+
+&lt;p&gt;I used to dismiss operator overloading as a frivolous feature, but it’s been
+valuable for floating point and SIMD math. Compilers
+generally aren’t going to do as much algebraic rearranging/simplification
+with those types, and it’s much easier to notice and tease out shared
+operations when operator overloading is used. That said, I would love to
+be able to do arbitrary overrides for &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;lt;&lt;/code&gt;, &lt;code class=&quot;highlighter-rouge&quot;&gt;&amp;gt;&lt;/code&gt;, etc. because SIMD types
+aren’t a good fit for &lt;code class=&quot;highlighter-rouge&quot;&gt;std::cmp::PartialOrd&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;As much as I like traits and bounded generics, they’ve been 
+painful when it comes to numeric types. A core type in my ray tracer is &lt;code class=&quot;highlighter-rouge&quot;&gt;Vec3&lt;/code&gt;,
+a struct of three &lt;code class=&quot;highlighter-rouge&quot;&gt;f32s&lt;/code&gt;. I wanted to make it generic across a SIMD type to let
+me work with 8 &lt;code class=&quot;highlighter-rouge&quot;&gt;Vec3s&lt;/code&gt; at once, so instead of three &lt;code class=&quot;highlighter-rouge&quot;&gt;f32s&lt;/code&gt; it would have three
+8-wide &lt;code class=&quot;highlighter-rouge&quot;&gt;f32s&lt;/code&gt; in struct-of-arrays form. This proved to be… not worth the
+hassle. In C++ I could write the &lt;code class=&quot;highlighter-rouge&quot;&gt;Vec3&lt;/code&gt; logic (dot product, cross product,
+etc.) as usual, parameterize it by &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt; or &lt;code class=&quot;highlighter-rouge&quot;&gt;f32x8&lt;/code&gt;, then go implement whatever
+mathematical overloads were missing. In Rust I need a set of unified traits
+between &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;f32x8&lt;/code&gt;. Either I need to define that unified trait myself,
+which is a lot of boilerplate, or I can use something like &lt;a href=&quot;https://crates.io/crates/num&quot;&gt;the num
+crate&lt;/a&gt;, which would require implementing more
+functionality than I actually use (and some of which isn’t applicable to
+SIMD).&lt;/p&gt;
+
+&lt;p&gt;Ultmately I didn’t bother.&lt;/p&gt;
+
+&lt;h2 id=&quot;rayon&quot;&gt;Rayon&lt;/h2&gt;
+
+&lt;p&gt;Rayon is a fantastic library. It was much nicer to work with than OpenMP,
+and &lt;code class=&quot;highlighter-rouge&quot;&gt;iter_bridge&lt;/code&gt; makes it dead simple to plug in anywhere.&lt;/p&gt;
+
+&lt;p&gt;Ultimately I ditched it for two reasons:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;I couldn’t find a way to directly control thread init, which meant I
+couldn’t replace my thread locals with stack variables. You can mostly get around this
+by using the &lt;code class=&quot;highlighter-rouge&quot;&gt;_init&lt;/code&gt; methods that take a closure, reading a thread local onto
+the stack then writing it back when the thread finishes its jobs.&lt;/li&gt;
+  &lt;li&gt;It does far more than I need, which came out in a number of small ways -
+like making profiler output harder to read because of a large number of
+nested joins.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;I ultimately switched to using crossbeam directly, spinning up my own thread
+pool reading off of a simple mpmc queue. Interestingly this is as fast as
+rayon with &lt;code class=&quot;highlighter-rouge&quot;&gt;iter_bridge&lt;/code&gt;, but is measurably slower than rayon’s custom
+parallel iterators for &lt;code class=&quot;highlighter-rouge&quot;&gt;Vecs&lt;/code&gt;. I’m still looking at why exactly that is, but it
+seems like rayon is doing a better job of load-balancing work. Ray tracers
+have a large number of pixels that can be processed in parallel, but each
+pixel has a variable amount of work, so you need to strike a balance between
+making batches too big (then one thread finishes early and you don’t fully
+utilize the machine) and too small (more thread contention to grab jobs). I
+need to add logging to rayon’s join splitting, but my hunch is that it’s
+doing a better job of keeping the batch size as high as possible without
+causing cores to go idle.&lt;/p&gt;
+
+&lt;p&gt;Update: See &lt;a href=&quot;/2020/11/09/rust-emit-asm.html&quot;&gt;this post&lt;/a&gt; for more
+investigation of the performance regression.&lt;/p&gt;
+
+&lt;h2 id=&quot;simd&quot;&gt;SIMD&lt;/h2&gt;
+
+&lt;p&gt;There are a few different places where SIMD is applicable in a ray tracer:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Do &lt;code class=&quot;highlighter-rouge&quot;&gt;Vec3&lt;/code&gt; operations in SIMD. This is a common initial idea, &lt;a href=&quot;https://fgiesen.wordpress.com/2016/04/03/sse-mind-the-gap/&quot;&gt;but it’s not
+particularly
+fruitful&lt;/a&gt;.&lt;/li&gt;
+  &lt;li&gt;Process multiple pixels or multiple rays for the same
+pixel in SIMD. This is very useful, though requires writing SIMD versions
+of some libm functions (notably trig functions). It’s also where you start
+hitting ray coherency problems - if you shoot 8 rays in a batch at roughly
+the same area of the scene, it’s likely that they’ll behave similarly. But as
+soon as they hit an object and bounce they all head in different directions,
+and pretty quickly you end up with dead lanes. Unless your scene is very
+simple that’s still going to be a net win. Then coherency issues can come up
+&lt;em&gt;again&lt;/em&gt; once you’ve calculated your hits and need to process materials - a
+ray of light hitting a lake leads to very different math from a ray of light
+hitting a tree. A good strategy for dealing with such things is to switch
+from doing a depth-first traversal of the scene to breadth-first, letting you
+accumulate enough state to batch likes with likes and pull, say, ‘8 tree
+hits’, ‘8 water hits’, etc. from the work queue all at once. The tradeoff is
+now you have a significant amount of additional memory use and possibly more
+thread synchronization, so it’s easy to accidentally make everything worse
+and slower (I’ve heard it’s more effective on GPUs, but know less about
+that). One very good paper on this style of optimized breadth-first CPU ray
+tracing is &lt;a href=&quot;https://www.embree.org/papers/2016-HPG-shading.pdf&quot;&gt;this one&lt;/a&gt;
+from Intel.&lt;/li&gt;
+  &lt;li&gt;Perform intersection checks for a single ray in SIMD. This isn’t as big 
+of an improvement as the former, but given the effort it has great bang for your buck. Most of the work to add SIMD
+was defining pass-through functions for intrinsics, with a few gnarlier ones
+here and there (eg. hmin). The trickier optimization work came from going
+back over the code and looking for any small places that I could simplify the
+calculations - little things like removing a negation or redundant multiply,
+switching to fma, etc. added up to substantial improvements.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;This was my first time using AVX2, and I didn’t realize it’s essentially
+“SSE but bigger.” In particular I was surprised that you can’t permute across
+128-bit lanes.&lt;/p&gt;
+
+&lt;p&gt;Other surprises were that rsqrt with a refinement iteration
+was slower than simply calling sqrt (though the Intel optimization manual did
+warn me about this on Skylake - I have so much other math going on that it led
+to port contention). And the cost of float conversions add up very quickly -
+initially I was lazy and only implemented an 8-wide &lt;code class=&quot;highlighter-rouge&quot;&gt;f32&lt;/code&gt; type, then would cast
+in/out if I needed some integer type instead. Adding a proper &lt;code class=&quot;highlighter-rouge&quot;&gt;i32x8&lt;/code&gt; got me a
+few percentage points of runtime improvement.&lt;/p&gt;
+
+&lt;p&gt;Rust’s current SIMD support is the absolute bare minimum. Intrinsics are exposed, all must be
+used in unsafe, and if you dig you can find some docs on &lt;code class=&quot;highlighter-rouge&quot;&gt;repr(simd)&lt;/code&gt;.
+There’s also a smattering of SIMD crates, some
+&lt;a href=&quot;https://crates.io/crates/wide&quot;&gt;good&lt;/a&gt;, some bad, some seemingly unmaintained.
+There’s nothing as complete or useful as &lt;a href=&quot;https://github.com/vectorclass/version2&quot;&gt;Agner Fog’s
+VCL&lt;/a&gt;. There &lt;em&gt;is&lt;/em&gt; however &lt;a href=&quot;https://github.com/rust-lang/project-portable-simd&quot;&gt;an active
+working group&lt;/a&gt; adding
+portable SIMD abstractions to the core. That’s very exciting, and looks like it’s shaping up
+nicely.&lt;/p&gt;
+
+&lt;h2 id=&quot;debugging&quot;&gt;Debugging&lt;/h2&gt;
+
+&lt;p&gt;Debugging ray tracers is surprisingly fun; you end up with a lot of “how on earth did &lt;em&gt;that&lt;/em&gt; happen” moments. Here are a few of my recent head scratchers:&lt;/p&gt;
+
+&lt;h3 id=&quot;reference-image&quot;&gt;Reference Image&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/reference1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This is my current reference scene. Not too exciting - I need to invest some time in building out a more complex scene and possibly adding obj/triangle support. But the performance work tends to be more fun.&lt;/p&gt;
+
+&lt;h3 id=&quot;blurred&quot;&gt;Blurred&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/bad_blur1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I have no idea what happened here. I found this in my output folder over the course of doing the refactor from rayon to crossbeam, so I don’t know exactly what broke - but I thought it was neat.&lt;/p&gt;
+
+&lt;h3 id=&quot;ripples&quot;&gt;Ripples&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/bad_fp1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This came from some bad floating point math - I think I messed up the intersection calculation in some way, but don’t remember exactly how. I thought the ripple effect was kinda fun.&lt;/p&gt;
+
+&lt;h3 id=&quot;fun-house-mirrors&quot;&gt;Fun House Mirrors&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/bad_normalize1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;“Maybe I don’t need to normalize my vectors here…”&lt;/p&gt;
+
+&lt;p&gt;&lt;em&gt;tries it&lt;/em&gt;&lt;/p&gt;
+
+&lt;p&gt;“Nope, I definitely need to normalize there.”&lt;/p&gt;
+
+&lt;h3 id=&quot;inside-out&quot;&gt;Inside Out&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/bad_sqrt1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;This came from trying to use a fast inverse sqrt without a refinement step. A lot of my intersections were messed up, so rays ended up bouncing around &lt;em&gt;inside&lt;/em&gt; objects and things got weird.&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">About a month ago I ported my C99 ray tracer side project to Rust. The initial port went smoothly, and I’ve now been plugging away adding features and repeatedly rewriting it in my spare hours. In parallel I’m getting up to speed on a large, production Rust codebase at work. The contrast between the two has been interesting - I have almost entirely positive things to say about Rust for large, multi-threaded codebases, but it hasn’t been as good of a fit for the ray tracer.</summary></entry><entry><title type="html">Porting a C99 Ray Tracer to Rust</title><link href="https://siliconsprawl.com/2020/09/27/rust-ray-tracer.html" rel="alternate" type="text/html" title="Porting a C99 Ray Tracer to Rust" /><published>2020-09-27T00:00:00+00:00</published><updated>2020-09-27T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/09/27/rust-ray-tracer</id><content type="html" xml:base="https://siliconsprawl.com/2020/09/27/rust-ray-tracer.html">&lt;p&gt;I needed to pick up Rust for work, so I ported my existing ray tracer to the
+language for a little practice. It’s now in the unimaginatively named
+&lt;a href=&quot;https://github.com/elindsey/ecl_rrt&quot;&gt;ecl_rt&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Overall it was a pleasant experience. I particularly like Rust’s object system
+(am I allowed to call it that?), the bounded generics, how it handles numeric
+primitives (requiring explicit conversion, giving easy, explicit control of
+overflow behavior), the focus on expressions, and the rayon library. The
+ML aspects are refreshing, but easy to overdo.&lt;/p&gt;
+
+&lt;p&gt;The development environment is fairly good, though I did hit a bug in rust
+analyzer and at one point had to wipe my build directory because cargo got
+confused and everything started failing to link.&lt;/p&gt;
+
+&lt;p&gt;The initial port was ~40% slower than the equivalent C99 codebase. Replacing
+the rand crate with the same custom PRNG I use in
+&lt;a href=&quot;https://github.com/elindsey/ecl_rt_legacy&quot;&gt;ecl_rt_legacy&lt;/a&gt; closed the gap to 15-20%. That’s
+still much higher than I’d like, but I haven’t had time to dig into it in
+depth. I can say that it’s not related to threading and nothing in the Rust
+assembly looks &lt;em&gt;too&lt;/em&gt; off - bounds checking isn’t hurting me very much, there
+aren’t a lot of extra function calls, etc. It seems that clang is optimizing
+the giant wad of floating point calculations slightly better, but I haven’t
+looked into what exactly it’s doing differently.&lt;/p&gt;
+
+&lt;h3 id=&quot;whiteout&quot;&gt;Whiteout&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/2.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;My initial render wasn’t too far off - at least it made an image! I forgot to average the pixel color values back down, so everything trended towards full white the longer the ray tracer ran.&lt;/p&gt;
+
+&lt;h3 id=&quot;upside-down&quot;&gt;Upside Down&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/3.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;With whiteout fixed, the next obvious problem is the image is upside down. This is common because images are represented as a giant flat buffer of pixel values, so when you go from an in memory representation to an image library or format you need to agree on how that buffer is stacked and unstacked, ie. does the first item in the buffer correspond to the top left or the bottom left pixel of the image. So I just reversed the buffer…&lt;/p&gt;
+
+&lt;h3 id=&quot;mirrored-colors&quot;&gt;Mirrored Colors&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/4.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Oops. In reversing the buffer I accidentally reversed my color channels, so red is blue and blue is red.&lt;/p&gt;
+
+&lt;h3 id=&quot;band-artifacts&quot;&gt;Band Artifacts&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/bad1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;I flipped the colors, but tried to get too clever with the PRNG. In this image I tried to seed my PRNG with the thread ID - which would be fine, except rayon was calling my seed function each time it checked out work from the job pool. Instead of a thread seeding once, it would reseed with the thread ID approximately fifty times over the course of the run. This causes visibile artifacting and the bands you see in the image. Rather than adjust it to only seed once, I opted to used the rand crate for reseeding (it’s so few calls that the overhead is negligible).&lt;/p&gt;
+
+&lt;h3 id=&quot;finally&quot;&gt;Finally…&lt;/h3&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/rrt/5.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;And now everything is sorted and we’re comparable to the ecl_rt reference image!&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">I needed to pick up Rust for work, so I ported my existing ray tracer to the language for a little practice. It’s now in the unimaginatively named ecl_rt.</summary></entry><entry><title type="html">DLX Redux</title><link href="https://siliconsprawl.com/2020/09/08/dlx-redux.html" rel="alternate" type="text/html" title="DLX Redux" /><published>2020-09-08T00:00:00+00:00</published><updated>2020-09-08T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/09/08/dlx-redux</id><content type="html" xml:base="https://siliconsprawl.com/2020/09/08/dlx-redux.html">&lt;p&gt;
+&lt;b&gt;Note: this post was from a college side project circa 2010. It held up fairly well, so I'm reposting it as-is. You've been warned.&lt;/b&gt;
+&lt;/p&gt;
+
+&lt;p&gt;I was never all that interested in working Sudokus by hand. I've known a few people who were straight up addicted to it, but I never understood the draw. To me, games become much less fun when I know that a relatively straightforward method of solving them exists. It's happened with Mastermind, Checkers, and, to a lesser extent, Chess. Playing them feels like a waste of time when I could be learning a more complex and interesting game (like &lt;a href=&quot;http://query.nytimes.com/gst/fullpage.html?res=9C04EFD6123AF93AA15754C0A961958260&quot;&gt;Go&lt;/a&gt;) instead.&lt;/p&gt;
+
+&lt;p&gt;But while playing them isn't terribly fun, writing a solver can be a blast!  In high school I tried to write one for Sudoku, but at the time I didn't have enough experience to do a proper job. I was still wrestling with teaching myself Scheme and recursion, so my program didn't make good use of backtracking. In fact, the only types of problems it could reliably solve were the most trivial of puzzles where you can definitively place a value at each stage in the solution and never have to branch. I had come across some literature on Knuth's Algorithm X, but it was over my head and I quickly got lost.&lt;/p&gt;
+
+&lt;p&gt;Just last Tuesday I stumbled across the same literature, namely Knuth's &lt;a href=&quot;http://www-cs-faculty.stanford.edu/~uno/papers/dancing-color.ps.gz&quot;&gt;Dancing Links&lt;/a&gt; paper. I had a bit of free time from the semester wrapping up and thought it'd be fun to give it another shot. I ended up spending around two days on it, and made a pretty nice little solver. The code is located &lt;a href=&quot;https://github.com/elindsey/ExactCover&quot;&gt;here&lt;/a&gt;. The source doesn't have enough comments, but it makes sense if you read and refer to the paper. Also, it needs a parser for input files to be suitable for general use. This was the first project I worked on with Eclipse and Egit, so there are a few extra workspace files in the tree.&lt;/p&gt;
+
+&lt;p&gt;The general class of problems that Sudoku belongs to is called exact cover. The core problem is that given a universe U and a group of subsets S, you want to find a subgroup S' such that every element in U is contained by exactly one of the subsets in S'. Basically, you want a group of subsets that don't overlap and &quot;cover&quot; every element in the stated universe.&lt;/p&gt;
+
+&lt;p&gt;As a concrete example, suppose that:&lt;br /&gt;
+U = {A, B, C}&lt;br /&gt;
+and our subsets are:&lt;br /&gt;
+S1 = {A}&lt;br /&gt;
+S2 = {A, B}&lt;br /&gt;
+S3 = {B, C}&lt;/p&gt;
+
+&lt;p&gt;The only valid solution is {S1, S3} since it covers all of the elements exactly once.&lt;/p&gt;
+
+&lt;p&gt;A popular method of solving this style of problem is with Knuth's (somewhat menacingly named) Algorithm X. The algorithm itself isn't all that complex; it's a pretty straightforward backtracking technique.&lt;/p&gt;
+
+&lt;p&gt;The basic data structure is a binary matrix where your columns are the universe and your rows are the sets you can choose from.&lt;br /&gt;
+For this simple example, the matrix would look like:&lt;/p&gt;
+
+&lt;table&gt;
+  &lt;thead&gt;
+    &lt;tr&gt;
+      &lt;th&gt; &lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;A&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;B&lt;/th&gt;
+      &lt;th style=&quot;text-align: center&quot;&gt;C&lt;/th&gt;
+    &lt;/tr&gt;
+  &lt;/thead&gt;
+  &lt;tbody&gt;
+    &lt;tr&gt;
+      &lt;td&gt;S1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;S2&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+    &lt;/tr&gt;
+    &lt;tr&gt;
+      &lt;td&gt;S3&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;0&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+      &lt;td style=&quot;text-align: center&quot;&gt;1&lt;/td&gt;
+    &lt;/tr&gt;
+  &lt;/tbody&gt;
+&lt;/table&gt;
+
+&lt;p&gt;It's easiest to view the columns as constraints that must be satisfied. In this case, we need an A, B, and C. Our goal is to condense this into an empty matrix, showing that all constraints have been satisfied.&lt;/p&gt;
+
+&lt;p&gt;We proceed by eliminating a row, placing it in our temporary solution. When we eliminate a row, we remove the constraints that it satisfies (the columns where it has a 1). When we remove those constraints, we also eliminate other rows that satisfy the constraint.&lt;/p&gt;
+
+&lt;p&gt;For example, if we include S2 in our temporary solution then constraints A and B are satisfied. Columns A and B will be removed. Since A and B have been satisfied, we must remove all other rows that also satisfy them as otherwise we'd have overlap. Thus, S1 and S3 are also eliminated. We are left with C as an unsatisfied constraint and no potential solutions left, so S2 was an incorrect choice and we must backtrack and try again.&lt;/p&gt;
+
+&lt;p&gt;While the algorithm is solid, the runtime isn't particularly good if it's implemented as a multidimensional array. The problem is that it's likely to be a large sparse matrix, so we'll end up spending a lot of time just iterating over a row or column looking for the next position that has a 1.&lt;/p&gt;
+
+&lt;p&gt;Dancing Links is a clever implementation strategy centered around the operation of removing and reinserting a node in a circular doubly-linked list. Essentially, you can pop the node out such that it's no longer in the list, but knows where it should go if you need to shove it back in later. By using this little trick and modeling the matrix as circular, four direction, doubly linked list (a torus, or donut shape) we can improve the complexity of finding the next 1 from O(N) to O(1).&lt;/p&gt;
+
+&lt;p&gt;So the only thing left to do is fit Sudoku onto the exact cover problem. For that we need an initial matrix that represents the standard 9x9 Sudoku game.&lt;/p&gt;
+
+&lt;p&gt;For determining columns, there are four constraints that we have to account for: each box, row, and column must have the numbers 1-9 exactly once, and each cell can only have one number (no cheating by writing in two and leaving another cell empty or some such). Each of these four constraints is actually going to break down into 81 individual constraints for a total of 324 columns.&lt;/p&gt;
+
+&lt;p&gt;For determining rows, we must list every valid position for each number. This is going to be 9 rows * 9 cols * 9 numbers for a total of 729 rows.&lt;/p&gt;
+
+&lt;p&gt;Once we create the necessary structure, we can remove the rows representing initially filled positions and solve it as a normal exact cover problem with DLX. As we add solutions to our temporary set we keep track of the row name, then just use that after termination to print out a solution (if one exists).&lt;/p&gt;
+
+&lt;p&gt;And that's about it! It really is a very cool implementation technique, and exact cover relates to a number of other interesting problems, so if you've got some time to spare I'd highly suggest flipping through Knuth's paper.&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">Note: this post was from a college side project circa 2010. It held up fairly well, so I'm reposting it as-is. You've been warned.</summary></entry><entry><title type="html">Learning About Ray Tracing</title><link href="https://siliconsprawl.com/2020/08/02/ray-tracers.html" rel="alternate" type="text/html" title="Learning About Ray Tracing" /><published>2020-08-02T00:00:00+00:00</published><updated>2020-08-02T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/08/02/ray-tracers</id><content type="html" xml:base="https://siliconsprawl.com/2020/08/02/ray-tracers.html">&lt;p&gt;I’ve had more time than usual for side projects since I’ve been stuck inside
+the past few months. I spent the majority of June digging into graphics, getting
+acquainted with the field by building a ray tracer. The initial version is now
+online as &lt;a href=&quot;https://github.com/elindsey/ecl_rt_legacy&quot;&gt;ecl_rt&lt;/a&gt;.&lt;/p&gt;
+
+&lt;p&gt;Rather than write yet another post about building a ray tracer, I’ll point to
+the handful of resources (from the multitude available) that were actually useful:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;a href=&quot;https://raytracing.github.io&quot;&gt;Ray Tracing in One Weekend&lt;/a&gt; is the canonical
+introductory tutorial. I didn’t love it - I wasn’t on board with the code
+structure and found it very light on explanation. I still think it’s a decent
+way to get something on the screen fast, so I’d recommend going through it
+quickly to get a prototype working and then move on.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;a href=&quot;https://www.pbrt.org&quot;&gt;Physically Based Rendering&lt;/a&gt; is dense and long, but
+also deep, insightful, and a pleasure to read. I wish I had picked it up
+earlier instead of spending so much time on various other books/tutorials. In
+general, I think you should do the minimum amount of work to get something on
+the screen and get the basic background knowledge to understand this book, then
+simply work through PBRT cover to cover. It’s incredible that the whole thing
+is available online for free (though I’d recommend picking up a physical copy
+if you expect you’ll be spending a lot of time with it).&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;&lt;a href=&quot;https://aras-p.info/blog/2018/03/28/Daily-Pathtracer-Part-0-Intro/&quot;&gt;Aras’ blog series on path
+tracers&lt;/a&gt;
+is a lot of fun.  He implemented a ray tracer in every imaginable way; it makes
+for great reading to compare some of the paths I didn’t take (eg. Metal or
+other modern GPU frameworks).&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;There’s a lot of work left, but it’s still fun to look at how far things have
+come. Here’s a few images showing the evolution of my ray tracer’s output, from
+the very first image it rendered to the current state:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rt/1.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rt/2.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rt/3.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rt/4.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rt/5.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/rt/6.png&quot; alt=&quot;&quot; /&gt;&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">I’ve had more time than usual for side projects since I’ve been stuck inside the past few months. I spent the majority of June digging into graphics, getting acquainted with the field by building a ray tracer. The initial version is now online as ecl_rt.</summary></entry><entry><title type="html">Building Pipelines with Circular Buffers, not Queues</title><link href="https://siliconsprawl.com/2020/06/15/circular-buffer.html" rel="alternate" type="text/html" title="Building Pipelines with Circular Buffers, not Queues" /><published>2020-06-15T00:00:00+00:00</published><updated>2020-06-15T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/06/15/circular-buffer</id><content type="html" xml:base="https://siliconsprawl.com/2020/06/15/circular-buffer.html">&lt;p&gt;Structuring programs as pipelines is a nice way to separate business logic and
+introduce parallelism - if you do it right it gets you both clarity and
+performance.&lt;/p&gt;
+
+&lt;p&gt;Typically this is done by tying threads together with some form of concurrent
+queue, such as a channel in Golang, ConcurrentLinkedQueue in Java, or
+concurrent_queue in C++ (Intel TBB or Microsoft PPL).&lt;/p&gt;
+
+&lt;p&gt;Using a simple integer pipeline as an example, we’ll have an initial phase
+writing random integers, one phase that multiplies its input by two, one phase
+that increments its input, and a final phase that prints the result.&lt;/p&gt;
+
+&lt;p&gt;With queues, it would look something like this:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/linear_pipeline.png&quot; alt=&quot;linear pipeline diagram&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;But the overhead of multiple queues can be quite high and variable, so is often
+unacceptable in low-latency programs. An alternative is to use a single
+circular buffer and have each thread hold a cursor into it. This pattern has
+significantly better behavior on current hardware and requires minimal
+synchronization. It’s variously known as event sourcing, the LMAX Disruptor, or
+“that giant circular buffer pattern.”&lt;/p&gt;
+
+&lt;p&gt;A shared circular buffer for our example would instead look like this:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/circular_pipeline.png&quot; alt=&quot;circular pipeline diagram&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;One way to think about this is that we’re moving the executor to the data instead
+of the data to the executor.&lt;/p&gt;
+
+&lt;p&gt;A few of the advantages:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Extremely good data locality. The prefetcher will pull data for the next item
+into the cache before we need it and we’ll keep the CPU well-fed and happy.&lt;/li&gt;
+  &lt;li&gt;No data needs to be copied between phases, whereas the queue needs a copy
+in/out of the queue. As the struct gets large the queue needs to start using
+a pointer indirect, which again hurts locality and puts more pressure on the
+gc. Since we don’t incur any expensive copies, the buffer can continue to store
+large structs directly. If our struct is written appropriately we also won’t
+need to do any expensive clean operation on struct reuse.&lt;/li&gt;
+  &lt;li&gt;Low contention. Each phase coordinates with a single atomic and one sync
+operation can batch multiple items at once (ie. we only do one sync to take
+ownership of all queued items for our phase), compared to a queue which
+typically must synchronize on each item.&lt;/li&gt;
+  &lt;li&gt;Very few pointers for the gc to scan, possibly just the pointer to the
+circular buffer and pointers between phases. With care we could code it to
+generate zero garbage when in steady state.&lt;/li&gt;
+  &lt;li&gt;Performance is consistent. Where the queue has multiple buffers that need to
+be sized, locks that may be contended, etc. it’s much easier in the circular
+buffer to quantify the total amount of work in the system and the worst-case
+performance under full load.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;A very barebones example:&lt;/p&gt;
+&lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;k&quot;&gt;package&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;import&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;
+	&lt;span class=&quot;s&quot;&gt;&quot;fmt&quot;&lt;/span&gt;
+	&lt;span class=&quot;s&quot;&gt;&quot;math/rand&quot;&lt;/span&gt;
+	&lt;span class=&quot;s&quot;&gt;&quot;runtime&quot;&lt;/span&gt;
+	&lt;span class=&quot;s&quot;&gt;&quot;sync/atomic&quot;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;type&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;data&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;num&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;type&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;phase&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;_&lt;/span&gt;        &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;// padding&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;   &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;_&lt;/span&gt;        &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;7&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;// padding&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;phase&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;64&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;// must be power of 2&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;const&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufMask&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;circularBuf&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;data&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;runPhase&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;phase&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LoadInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+			&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bufMask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+			&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;StoreInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;runtime&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Gosched&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;runWriter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;phase&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;New&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rand&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;NewSource&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LoadInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+			&lt;span class=&quot;c&quot;&gt;// empty buffer&lt;/span&gt;
+			&lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+		&lt;span class=&quot;k&quot;&gt;for&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bufMask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bufMask&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+			&lt;span class=&quot;n&quot;&gt;circularBuf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bufMask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;r&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Intn&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;100&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+			&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;
+		&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;StoreInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;runtime&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Gosched&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;func&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;main&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+	&lt;span class=&quot;c&quot;&gt;// writeRandInt -&amp;gt; multTwo -&amp;gt; addOne -&amp;gt; printResult&lt;/span&gt;
+	&lt;span class=&quot;k&quot;&gt;var&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;printResult&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;addOne&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;multTwo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;writeRandInt&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;phase&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;writeRandInt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;printResult&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;printResult&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addOne&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;addOne&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;multTwo&lt;/span&gt;
+	&lt;span class=&quot;n&quot;&gt;multTwo&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;writeRandInt&lt;/span&gt;
+
+	&lt;span class=&quot;k&quot;&gt;go&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;runWriter&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;writeRandInt&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+	&lt;span class=&quot;k&quot;&gt;go&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;runPhase&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;addOne&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;circularBuf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;++&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+
+	&lt;span class=&quot;k&quot;&gt;go&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;runPhase&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;multTwo&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;circularBuf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;num&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;2&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+
+	&lt;span class=&quot;k&quot;&gt;go&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;runPhase&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;printResult&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;func&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+		&lt;span class=&quot;n&quot;&gt;fmt&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;Println&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;circularBuf&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;])&lt;/span&gt;
+	&lt;span class=&quot;p&quot;&gt;})&lt;/span&gt;
+
+	&lt;span class=&quot;k&quot;&gt;select&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{}&lt;/span&gt; &lt;span class=&quot;c&quot;&gt;// block forever&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;This code is meant to show off the core concept in the smallest amount of code
+possible. Fully building this out you would hide the cursor logic behind a nice
+API and the final business logic would look very similar to a queue-based
+implementation looping on a consume function.&lt;/p&gt;
+
+&lt;p&gt;A few specific notes about the implementation:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;The cursors are not truncated to the size of the buffer each time they’re
+incremented, instead they count towards integer max and wrap. This makes it
+easy to disambiguate completely empty buffers from completely full buffers.&lt;/li&gt;
+  &lt;li&gt;The example has no backoff or wait strategy. Busy spin is what you’d want
+for a high-load, low-latency system, but something that trades a small
+amount of performance to let the CPU idle is preferable in other cases. Ideally
+this would be implemented with direct calls to gopark/goready, but those aren’t
+exposed externally by the runtime. A condvar can be used instead.&lt;/li&gt;
+  &lt;li&gt;The example also has no batching strategy except “grab everything
+available”. This will lead to clumping, but fixing is trivial.&lt;/li&gt;
+  &lt;li&gt;On x86_64, atomic loads are compiled to &lt;code class=&quot;highlighter-rouge&quot;&gt;mov&lt;/code&gt; and atomic stores are compiled
+to &lt;code class=&quot;highlighter-rouge&quot;&gt;xchg&lt;/code&gt;. arm64 compiles these to &lt;code class=&quot;highlighter-rouge&quot;&gt;ldar&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;stlr&lt;/code&gt; respectively. This is
+standard, but was my first time looking at the asm for atomics in golang, so I
+was happy to see solid codegen.&lt;/li&gt;
+  &lt;li&gt;The conditional for the empty queue case in the writer is unfortunate.
+Ideally we would write that conditional as straightline code, eg.
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LoadInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;p&gt;This would generate a &lt;code class=&quot;highlighter-rouge&quot;&gt;cmp&lt;/code&gt; but no &lt;code class=&quot;highlighter-rouge&quot;&gt;jmp&lt;/code&gt;. Unfortunately I know of no way to
+express this in go, and the optimizer doesn’t do it for us. It is a common pattern
+in C and other systems programming languages.
+Since we know the numbers are positive but we’re saving them in 2s complement,
+in this case we do have a path to doing this with computation, but it’s
+silly and mostly academic.&lt;/p&gt;
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LoadInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;notEmpty&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;^&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;upmult&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;notEmpty&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;63&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;notEmpty&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;63&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;                                                                                                                                                  
+&lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upmult&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upmult&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; 
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+    &lt;p&gt;Update: turns out there is a way to express this. At least as of go 1.19, this
+generates the assembly I’m looking for - straightline code with a &lt;code class=&quot;highlighter-rouge&quot;&gt;cmp&lt;/code&gt; but not &lt;code class=&quot;highlighter-rouge&quot;&gt;jmp&lt;/code&gt;.&lt;/p&gt;
+    &lt;div class=&quot;language-go highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;atomic&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;LoadInt64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;p&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;cursor&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;kt&quot;&gt;int64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;0&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+ &lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;upstreamLimit&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;:=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upstream&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;^&lt;/span&gt;&lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;curr&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;+&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bufSize&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;m&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;empty&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;    &lt;/div&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;One last note: channels in go are deeply integrated with the runtime and do
+things like make explicit gopark/goready calls, copy values from one
+goroutine’s stack directly into another’s, etc. You could do a lot worse, and
+should make sure they don’t fit your needs before rolling your own.&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">Structuring programs as pipelines is a nice way to separate business logic and introduce parallelism - if you do it right it gets you both clarity and performance.</summary></entry><entry><title type="html">Fast Subnet Matching</title><link href="https://siliconsprawl.com/2020/06/07/fast-subnet-matching.html" rel="alternate" type="text/html" title="Fast Subnet Matching" /><published>2020-06-07T00:00:00+00:00</published><updated>2020-06-07T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/06/07/fast-subnet-matching</id><content type="html" xml:base="https://siliconsprawl.com/2020/06/07/fast-subnet-matching.html">&lt;p&gt;Determining if a subnet contains a given IP is a fundamental operation in
+networking. Router dataplanes spend all of their time looking up prefix matches
+to make forwarding decisions, but even higher layers of application code need
+to perform this operation - for example, looking up a client IP address in a
+geographical database or checking a client IP against an abuse blocklist.&lt;/p&gt;
+
+&lt;p&gt;Routers have extremely optimized implementations, but since these other uses
+may be one-off codepaths in a higher-level language (eg. some random Go
+microservice), they’re not written with the same level of care and
+optimization.  Sometimes they’re written with no care or optimization at all
+and quickly become bottlenecks.&lt;/p&gt;
+
+&lt;p&gt;Here’s a list of basic techniques and tradeoffs to reference next time you need
+to implement this form of lookup; I hope it’s useful in determining a good
+implementation for the level of optimization you need.&lt;/p&gt;
+
+&lt;h3 id=&quot;multiple-subnets&quot;&gt;Multiple Subnets&lt;/h3&gt;
+
+&lt;p&gt;If you have multiple subnets and want to determine which of them match a given
+IP (eg. longest prefix match), you should be reaching for something in the trie
+family. I won’t cover the fundamentals here, but do recommend &lt;em&gt;The Art of
+Computer Programming, Vol.  3&lt;/em&gt; for an overview.&lt;/p&gt;
+
+&lt;p&gt;Be extremely skeptical of any off-the-shelf radix libraries:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;Many do not do prefix compression&lt;/li&gt;
+  &lt;li&gt;Many support N instead of two edges, which may lead to unnecessary memory overhead&lt;/li&gt;
+  &lt;li&gt;Many will operate on some form of string type to be as generic as possible, again contributing to memory overhead&lt;/li&gt;
+  &lt;li&gt;All be difficult to adapt to different stride lengths&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;I would highly recommend writing your own implementation if performance is a
+concern at all. Most common implementations are either too generic or are optimized
+for exact instead of prefix match.&lt;/p&gt;
+
+&lt;h4 id=&quot;unibit-to-multibit-to-compressed&quot;&gt;unibit to multibit to compressed&lt;/h4&gt;
+
+&lt;p&gt;A radix 2 trie that does bit-by-bit comparison with compression for empty nodes
+is a good starting point. To further speed it up, you’ll want to compare more
+than one bit at a time - this is typically referred to as a multibit stride.&lt;/p&gt;
+
+&lt;p&gt;Multibit strides will get you significantly faster lookup time at the cost of
+some memory - in order to align all comparisons on the stride size, you’ll need
+to expand some prefixes.&lt;/p&gt;
+
+&lt;p&gt;As an example, let’s say you’re building a trie that contains three prefixes:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;Prefix 1: 01*&lt;/li&gt;
+  &lt;li&gt;Prefix 2: 110*&lt;/li&gt;
+  &lt;li&gt;Prefix 3: 10*&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;A unibit trie would look like this:
+&lt;img src=&quot;/assets/images/unibit.png&quot; alt=&quot;unibit trie diagram&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;If instead we want to use a multibit trie with a stride of two bits, then
+prefix 2 needs to be expanded into its two sub-prefixes, 1101* and 1100*. Our
+multibit trie would look like this:&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/multibit.png&quot; alt=&quot;multibit trie diagram&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Note how this trie has incresed our memory usage by duplicating prefix 2, but
+has reduced our memory accesses and improved locality (there are far fewer
+pointers chased in this diagram), thus trading memory usage for lookup
+performance.&lt;/p&gt;
+
+&lt;p&gt;Most of the time a multibit trie is where you can stop. If you need to optimize
+further, especially if you need to start reducing memory usage, then you’ll
+want to explore the literature on compressed tries. The general idea with many
+of these is to use a longer or adaptive stride, but find clever ways to remove
+some of the redundancy it introduces. Starting points include LC-tries, Luleå
+tries, and tree bitmaps.&lt;/p&gt;
+
+&lt;h4 id=&quot;modified-traversals&quot;&gt;Modified traversals&lt;/h4&gt;
+
+&lt;p&gt;There are some common, related problems that can be solved by small
+modifications to the traversal algorithm:&lt;/p&gt;
+&lt;ul&gt;
+  &lt;li&gt;If instead of finding the longest
+prefix match you need to find all containing subnets, simply keep track of the
+list of all matching nodes instead of the single most recent node as you
+traverse and return the full set at the end.&lt;/li&gt;
+  &lt;li&gt;If you need to match a containing subnet on some criteria other than most
+specific match, for example declaration order from a config file, express this
+as a numerical priority and persist it alongside the node. As you traverse,
+keep track of the most recently visited node and only replace it if the
+currently visited is a higher priority.&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;h4 id=&quot;sidenote-on-patricia-tries&quot;&gt;Sidenote on PATRICIA tries&lt;/h4&gt;
+
+&lt;p&gt;PATRICIA tries are a radix 2 trie that saves a
+count of bits skipped instead of the full substring when doing compression. You
+don’t want this! They’re great for exact match lookup, like what you’d want in
+a trie of filenames, but saving only the skip count causes prefix matches to
+backtrack, resulting in significantly worse performance. It’s unfortunate that
+they’re so often associated with networking; in some cases the name is misused
+and people say PATRICIA when they simple mean radix 2.&lt;/p&gt;
+
+&lt;h3 id=&quot;single-subnet&quot;&gt;Single Subnet&lt;/h3&gt;
+
+&lt;p&gt;If you have a large number of IPs and want to check if a single subnet contains
+them, spend a little time looking at your assembler output to choose a good
+implementation. If available, you’re best off using 128-bit literals to support
+IPv6. C, C++, Rust, and many systems languages will support this.
+Unfortunately Go and Java do not, so you’ll have to piece it together with two
+64-bit integers - slightly cumbersome, and slightly more overhead as we’ll see.&lt;/p&gt;
+
+&lt;p&gt;In IPv4, subnet contains checking is easy since everything fits in a word,
+roughly:&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;c1&quot;&gt;// checking if 1.2.3.0/8 contains 1.2.3.4&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint32_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x01020300&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// prefix address, packed big endian&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint32_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x01020304&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// client address, packed big endian&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint8_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;8&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// netmask, range 0-32&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint32_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0xFFFFFFFF&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;32&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// invert the mask to get a count of number of zeros&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// subnet contains client&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;IPv6 is when things get interesting. 128-bit long IPv6 addresses means juggling
+two machine words. In computing the bitmask we need a mask for the upper and
+the lower portion of the address.&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper_prefix&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower_prefix&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper_client&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower_client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// assume these are initialized&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint8_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;c1&quot;&gt;// netmask, range 0-128&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper_bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;UINT64_MAX&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower_bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;UINT64_MAX&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;lower_bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;upper_bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower_bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;((&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upper_prefix&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper_bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upper_client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper_bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; 
+    &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lower_prefix&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower_bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;lower_client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower_bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;))&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// subnet contains client&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Rewriting with gcc/clang’s int128 emulated type:&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;__uint128&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; &lt;span class=&quot;c1&quot;&gt;// assume these are initialized&lt;/span&gt;
+&lt;span class=&quot;kt&quot;&gt;uint8_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;&lt;span class=&quot;c1&quot;&gt;// netmask, range 0-128&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;__uint128&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bitmask&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;std&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;numeric_limits&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;__uint128_t&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;&amp;gt;::&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;max&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;()&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;128&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;mask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;prefix&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;client&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;bitmask&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;c1&quot;&gt;// subnet contains client&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;The emulated int128s are much easier to read and work with, but how does performance compare?&lt;/p&gt;
+
+&lt;p&gt;Here is the source code and &lt;a href=&quot;https://godbolt.org/z/afNGvT&quot;&gt;Godbolt link&lt;/a&gt; for a
+small test, isolating just the shift portion:&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;cp&quot;&gt;#include &amp;lt;cstdint&amp;gt;
+&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;__int128&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;shift128&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;uint8_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;__int128&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt; 
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;t&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;struct&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Pair&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;first&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;second&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+
+&lt;span class=&quot;n&quot;&gt;Pair&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;shift64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;uint8_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;else&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;upper&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;64&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Pair&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upper&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;And here is the compiler’s optimized x86 assembly with comments added:&lt;/p&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;shift128(unsigned char):
+        mov     ecx, edi ; load mask into ecx
+        mov     rax, -1 ; initialize lower word
+        xor     esi, esi ; zero this register for use in cmov
+        mov     rdx, -1 ; initialize upper word
+        sal     rax, cl ; shift lower word by mask
+        and     ecx, 64 ; and our mask with 64
+        cmovne  rdx, rax ; move lower word into upper
+        cmovne  rax, rsi ; zero lower word
+        ret
+shift64(unsigned char):
+        movzx   ecx, dil ; load mask into ecx
+        cmp     dil, 63
+        ja      .L4 ; jump if mask is &amp;gt;= 64
+        mov     rdx, -1 ; initialize lower word
+        mov     rax, -1 ; initialize upper word
+        sal     rdx, cl ; shift lower word by mask
+        ret
+.L4:
+        sub     ecx, 64 ; find out how much we need to shift the upper word by
+        mov     rax, -1 ; initialize upper word
+        xor     edx, edx ; mask was &amp;gt;64, so just zero the lower word
+        sal     rax, cl ; shift upper word
+        ret
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;There are a few interesting things to note:&lt;/p&gt;
+&lt;ol&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;sal&lt;/code&gt; will automatically mask its shift operand to the appropriate range, so
+while it’s undefined behavior in C to shift by more than the size of the
+target, this is fine at the asm level&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;and&lt;/code&gt; with 64 is using knowledge of undefined behavior - our shift is only
+well-defined within the range of 1-127, so we assume UB is impossible and
+ignore the range outside.&lt;/li&gt;
+  &lt;li&gt;&lt;code class=&quot;highlighter-rouge&quot;&gt;cmov&lt;/code&gt; is used instead of a jump. On modern hardware this should be strictly
+better, though is most noticeable when jumps are unpredictable. Our jumps
+should be very predictable here.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;If we wanted, we could rewrite the int64 version in a way that would more
+closely match the int128 assembly:&lt;/p&gt;
+
+&lt;div class=&quot;language-c highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;&lt;span class=&quot;n&quot;&gt;Pair&lt;/span&gt; &lt;span class=&quot;nf&quot;&gt;shift64_v2&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;kt&quot;&gt;uint8_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;upper&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;kt&quot;&gt;uint64_t&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;=&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x3F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;);&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;shift&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;gt;&lt;/span&gt; &lt;span class=&quot;mh&quot;&gt;0x3F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;upper&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+        &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;;&lt;/span&gt;
+    &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+    &lt;span class=&quot;k&quot;&gt;return&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;Pair&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;upper&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;lower&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;};&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;shift64_v2(unsigned char):
+        mov     ecx, edi
+        mov     rdx, -1
+        mov     rax, -1
+        sal     rdx, cl
+        cmp     dil, 63
+        jbe     .L4
+        mov     rax, rdx
+        xor     edx, edx
+.L4:
+        ret
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;p&gt;Note how the assembly does not contain any explicit &lt;code class=&quot;highlighter-rouge&quot;&gt;and&lt;/code&gt; with 0x3F, we’ve
+merely communicated to the compiler that we want the &lt;code class=&quot;highlighter-rouge&quot;&gt;sal&lt;/code&gt; instruction’s
+default mask behvior. Our &lt;code class=&quot;highlighter-rouge&quot;&gt;cmov&lt;/code&gt; has also been converted to &lt;code class=&quot;highlighter-rouge&quot;&gt;jmp&lt;/code&gt;.&lt;/p&gt;
+
+&lt;p&gt;Previously I’d hoped that I could use the 128-bit SSE registers and mm
+intrinsics to operate on IPv6 addresses natively. However, operations to use
+SSE registers as a single 128-bit value (as opposed to 2 64-bit values, 4
+32-bit values, etc.) are quite limited. In particular, &lt;code class=&quot;highlighter-rouge&quot;&gt;_mm_slli_si128&lt;/code&gt; shifts
+by bytes instead of bits so won’t work for our use case (though SIMD
+instructions would be useful for performing matches against multiple client IPs
+at once).&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">Determining if a subnet contains a given IP is a fundamental operation in networking. Router dataplanes spend all of their time looking up prefix matches to make forwarding decisions, but even higher layers of application code need to perform this operation - for example, looking up a client IP address in a geographical database or checking a client IP against an abuse blocklist.</summary></entry><entry><title type="html">Network Programming Self-Study</title><link href="https://siliconsprawl.com/2020/05/10/network-programming-self-study.html" rel="alternate" type="text/html" title="Network Programming Self-Study" /><published>2020-05-10T00:00:00+00:00</published><updated>2020-05-10T00:00:00+00:00</updated><id>https://siliconsprawl.com/2020/05/10/network-programming-self-study</id><content type="html" xml:base="https://siliconsprawl.com/2020/05/10/network-programming-self-study.html">&lt;p&gt;Lately I’ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.&lt;/p&gt;
+
+&lt;p&gt;I’ve been in this space ten years now, working across layers 3 to 7 on CDNs, DNS, and protocol stacks at a couple of FAANGs and a startup. If you name a piece of software that runs in an edge network, I’ve probably seen one (or three) versions of it.&lt;/p&gt;
+
+&lt;p&gt;Advice is tricky. It’s easy to turn things I learned into Things Everyone Should Learn. It’s also easy to fit an inaccurate narrative to a path, to recast something as a logical progression when it was really blind stumbling around. 
+I could spin a yarn about how networking was the first thing I did with computers, how I did a CCNA in high-school and something something destiny. But I could also tell the story of how I did that CCNA primarily to get out of taking PE, and how I found my college networking class so tedious that I dropped it in the first week and never tried again (for some inexplicable reason it was an optional elective at my university).&lt;/p&gt;
+
+&lt;p&gt;I’ll avoid all that - I don’t think my exact career path is all that interesting. But I’ll offer one piece of advice (because I can’t entirely resist), and a handful of books that I’ve found useful and interesting (because too many are not both). If the advice doesn’t resonate, ignore it. If a book seems boring, skip it.&lt;/p&gt;
+
+&lt;h3 id=&quot;general-advice&quot;&gt;General Advice&lt;/h3&gt;
+
+&lt;p&gt;Networks are not a pure, abstract technology. Honestly nothing is, but networks in particular are physical, temporal things. They exist in a certain place at a certain time, influenced by people, technology, nature, and politics.&lt;/p&gt;
+
+&lt;p&gt;You will be a better developer if you involve yourself in the reality of networking.  Follow NANOG, OARC, or other lists where operators hang out, try to understand the discussion, their mindsets and biases. Pay attention to things, and pay attention &lt;em&gt;as they are happening&lt;/em&gt;. If there’s an operational event or outage, follow it, attempt to debug as it unfolds, then later compare notes with whoever was working it. Working on something independently until you get stuck and then articulating exactly what you’re stuck on is one of the most useful skills you can develop, and working events in realtime is a great way to practice.&lt;/p&gt;
+
+&lt;h3 id=&quot;networking-resources&quot;&gt;Networking Resources&lt;/h3&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;a href=&quot;https://hpbn.co&quot;&gt;High Performance Browser Networking&lt;/a&gt; - this is an excellent crash course on protcols and browsers. This is 90% of what most software developers need to know about networking. It’s available for free online.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.amazon.com/Interconnections-Bridges-Switches-Internetworking-Protocols/dp/0201634481&quot;&gt;Interconnections&lt;/a&gt; - this is my favorite resource for learning about routing protocols. Perlman is extremely accomplished in the field &lt;em&gt;and&lt;/em&gt; has an accessible writing style. A few newer protocols are missing, but this will give you the necessary background to pick those up easily. It’s very affordable since it’s an older book.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.amazon.com/Network-Routing-Algorithms-Architectures-Networking-ebook/dp/B075H8ZPZK&quot;&gt;Network Routing&lt;/a&gt; - I only recommend this for the chapter on hardware, and possibly the chapter on label switching. It has a great overview of how a physical router is put together and works, but most of the book is dry and nowhere near as engaging as Perlman. Unfortunately it is an expensive text; borrow it if you can.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://drpeering.net/core/bookOutline.html&quot;&gt;The Internet Peering Playbook&lt;/a&gt; - this book is all about the people/business side of how the Internet functions. It’s a fascinating read and even if you don’t work in the space will help you understand the dynamics of eg. cable companies, large Internet players, etc. The physical book is impossible to obtain, but the Kindle edition is inexpensive and much of the content is available for free on the DrPeering site.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;systems-programming-resources&quot;&gt;Systems Programming Resources&lt;/h3&gt;
+
+&lt;p&gt;Network programming is a form of systems programming. There are certain systems programming resources that I consider indispensible. These are generally not books to go buy all at once and read cover to cover (though you could!), but if there are specific topics you need to understand in more depth - say, lock-free datastructures or sockets or epoll - then this is where you go first. Internet resources are woefully inaccurate or out of date on many of these topics.&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;&lt;a href=&quot;https://mirrors.edge.kernel.org/pub/linux/kernel/people/paulmck/perfbook/perfbook.html&quot;&gt;Perfbook&lt;/a&gt; - this is the primary resource for anything related to parallel programming. CPU architecture, memory access semantics, threads, locks, atomics, RCU, hazard pointers, parallel data structures. It’s a phenomenal resource, freely available and frequently updated.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.amazon.com/Computer-Systems-Programmers-Perspective-3rd/dp/013409266X&quot;&gt;Computer Systems: A Programmer’s Perspective&lt;/a&gt; - this is a good first stop for any hardware or systems questions. Things like how does virtual memory work, how does a linker work, and so on. Often if you need more depth it will only serve as a jumping off point to relevant OS or CPU manuals, but I still find it valuable. Unfortunately it’s quite expensive since it’s a current textbook.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.amazon.com/Linux-Programming-Interface-System-Handbook-ebook/dp/B004OEJMZM&quot;&gt;The Linux Programming Interface&lt;/a&gt; - in the tradition of &lt;em&gt;The Unix Programming Environment&lt;/em&gt; and &lt;em&gt;TCP/IP Illustrated&lt;/em&gt;, this is my preferred one-stop shop for Linux APIs. Lucid, in-depth writing, broad coverage.&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://www.amazon.com/Systems-Performance-Enterprise-Brendan-Gregg-ebook/dp/B00FLYU9T2/&quot;&gt;Systems Performance&lt;/a&gt; - you will need to think about performance, it comes with the territory. This is the book to read on performance. Also, check out Brendan Gregg’s blog, talks, and more recent work on BPF.&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;project-ideas&quot;&gt;Project Ideas&lt;/h3&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;
+    &lt;p&gt;Read the DNS RFCs and implement either a stub resolver or an authoritative server in your language of choice. Start with a few record types and expand as long as you’re interested. Use wireshark to view the traffic and debug.&lt;/p&gt;
+
+    &lt;p&gt;You’ll eventually need to learn how to read RFCs, and the original DNS RFCs are straightforward. DNS isn’t encrypted so you’ll have an easy time sniffing your traffic during development. Best of all, it’s exciting getting a piece of software you wrote interacting with something you didn’t write - either using your stub resolver to query a public DNS server, or using dig/unbound to query your authoritative server. DNS is fun.&lt;/p&gt;
+  &lt;/li&gt;
+  &lt;li&gt;
+    &lt;p&gt;Play with a lab network. This doesn’t need to be a physical lab - &lt;a href=&quot;https://www.gns3.com&quot;&gt;GNS3&lt;/a&gt; with &lt;a href=&quot;https://www.vyos.io&quot;&gt;VyOS&lt;/a&gt;, &lt;a href=&quot;https://wiki.mikrotik.com/wiki/Manual:CHR&quot;&gt;MikroTik&lt;/a&gt;, or any Linux distro running &lt;a href=&quot;https://frrouting.org&quot;&gt;FRRouting&lt;/a&gt; makes a great environment for experimentation. You can build a complex network environment, packet sniff every single link to see how routers are communicating, and drop a container or VM running your own network software into the mix. If you need a goal, try setting up two separate ASes, one running IS-IS and one running OSPF. Model an Internet exchange and have them peer.&lt;/p&gt;
+  &lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;h3 id=&quot;tangent-languages&quot;&gt;Tangent: Languages&lt;/h3&gt;
+
+&lt;p&gt;I’m going to avoid languages except for one note: you’ll need to know C, even if it’s just enough to read others’ code. There are plenty of ways to learn it, but I’d recommend &lt;a href=&quot;https://modernc.gforge.inria.fr&quot;&gt;Modern C&lt;/a&gt;. I have some minor nits with the book, but it’s a high-quality, concise, freely available text that covers all the language features you need to know and points out many of the problematic areas.&lt;/p&gt;
+
+&lt;p&gt;C is a simple language. It doesn’t benefit from reading many books or tutorials. Most of the complexity lies in working with memory and dealing with optimizing compilers, so you must use it to understand it.&lt;/p&gt;
+
+&lt;p&gt;If you want a starter C project, try implementing malloc. You’ll learn about virtual memory, commited versus reserved pages, fragmentation, and how to write fast software. You’ll also gain an understanding of how even simple looking C stdlib functions hide significant complexity (try to imagine what complexity a higher level langauge hides). When you’re done, read about tcmalloc or jemalloc and compare notes. Run your code under asan and ubsan to find bugs.&lt;/p&gt;
+
+&lt;h3 id=&quot;the-end&quot;&gt;The End&lt;/h3&gt;
+
+&lt;p&gt;Good luck and have fun!&lt;/p&gt;
+
+&lt;h3 id=&quot;addenda&quot;&gt;Addenda&lt;/h3&gt;
+
+&lt;p&gt;Most people will get the DNS knowledge they need from the books listed in the Networking Resources section. But if you want significantly more depth (eg. if you’re starting a new job at a DNS company) then I recommend &lt;a href=&quot;https://www.amazon.com/Managing-Mission-Critical-Demystifying-nameservers-ebook/dp/B07F71QMFM&quot;&gt;Managing Mission-Critical Domains and DNS&lt;/a&gt;. I like that it covers the entire ecosystem - registrars, WHOIS, DNS, DNSSEC, some major open-source implementations, and even touches on operations/DDOS.&lt;/p&gt;</content><author><name>Eli Lindsey</name></author><summary type="html">Lately I’ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.</summary></entry></feed>

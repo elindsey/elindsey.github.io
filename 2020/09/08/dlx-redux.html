@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo="><!-- Begin Jekyll SEO tag v2.6.1 -->
+<title>DLX Redux | silicon_sprawl_</title>
+<meta name="generator" content="Jekyll v4.0.1" />
+<meta property="og:title" content="DLX Redux" />
+<meta name="author" content="Eli Lindsey" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="Note: this post was from a college side project circa 2010. It held up fairly well, so I&#39;m reposting it as-is. You&#39;ve been warned." />
+<meta property="og:description" content="Note: this post was from a college side project circa 2010. It held up fairly well, so I&#39;m reposting it as-is. You&#39;ve been warned." />
+<link rel="canonical" href="https://siliconsprawl.com/2020/09/08/dlx-redux.html" />
+<meta property="og:url" content="https://siliconsprawl.com/2020/09/08/dlx-redux.html" />
+<meta property="og:site_name" content="silicon_sprawl_" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-09-08T00:00:00+00:00" />
+<script type="application/ld+json">
+{"datePublished":"2020-09-08T00:00:00+00:00","author":{"@type":"Person","name":"Eli Lindsey"},"description":"Note: this post was from a college side project circa 2010. It held up fairly well, so I&#39;m reposting it as-is. You&#39;ve been warned.","url":"https://siliconsprawl.com/2020/09/08/dlx-redux.html","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://siliconsprawl.com/2020/09/08/dlx-redux.html"},"headline":"DLX Redux","dateModified":"2020-09-08T00:00:00+00:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://siliconsprawl.com/feed.xml" title="silicon_sprawl_" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">silicon_sprawl_</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about.html">about</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">DLX Redux</h1>
+    <p class="post-meta"></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>
+<b>Note: this post was from a college side project circa 2010. It held up fairly well, so I'm reposting it as-is. You've been warned.</b>
+</p>
+
+<p>I was never all that interested in working Sudokus by hand. I've known a few people who were straight up addicted to it, but I never understood the draw. To me, games become much less fun when I know that a relatively straightforward method of solving them exists. It's happened with Mastermind, Checkers, and, to a lesser extent, Chess. Playing them feels like a waste of time when I could be learning a more complex and interesting game (like <a href="http://query.nytimes.com/gst/fullpage.html?res=9C04EFD6123AF93AA15754C0A961958260">Go</a>) instead.</p>
+
+<p>But while playing them isn't terribly fun, writing a solver can be a blast!  In high school I tried to write one for Sudoku, but at the time I didn't have enough experience to do a proper job. I was still wrestling with teaching myself Scheme and recursion, so my program didn't make good use of backtracking. In fact, the only types of problems it could reliably solve were the most trivial of puzzles where you can definitively place a value at each stage in the solution and never have to branch. I had come across some literature on Knuth's Algorithm X, but it was over my head and I quickly got lost.</p>
+
+<p>Just last Tuesday I stumbled across the same literature, namely Knuth's <a href="http://www-cs-faculty.stanford.edu/~uno/papers/dancing-color.ps.gz">Dancing Links</a> paper. I had a bit of free time from the semester wrapping up and thought it'd be fun to give it another shot. I ended up spending around two days on it, and made a pretty nice little solver. The code is located <a href="https://github.com/elindsey/ExactCover">here</a>. The source doesn't have enough comments, but it makes sense if you read and refer to the paper. Also, it needs a parser for input files to be suitable for general use. This was the first project I worked on with Eclipse and Egit, so there are a few extra workspace files in the tree.</p>
+
+<p>The general class of problems that Sudoku belongs to is called exact cover. The core problem is that given a universe U and a group of subsets S, you want to find a subgroup S' such that every element in U is contained by exactly one of the subsets in S'. Basically, you want a group of subsets that don't overlap and "cover" every element in the stated universe.</p>
+
+<p>As a concrete example, suppose that:<br />
+U = {A, B, C}<br />
+and our subsets are:<br />
+S1 = {A}<br />
+S2 = {A, B}<br />
+S3 = {B, C}</p>
+
+<p>The only valid solution is {S1, S3} since it covers all of the elements exactly once.</p>
+
+<p>A popular method of solving this style of problem is with Knuth's (somewhat menacingly named) Algorithm X. The algorithm itself isn't all that complex; it's a pretty straightforward backtracking technique.</p>
+
+<p>The basic data structure is a binary matrix where your columns are the universe and your rows are the sets you can choose from.<br />
+For this simple example, the matrix would look like:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th> </th>
+      <th style="text-align: center">A</th>
+      <th style="text-align: center">B</th>
+      <th style="text-align: center">C</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>S1</td>
+      <td style="text-align: center">1</td>
+      <td style="text-align: center">0</td>
+      <td style="text-align: center">0</td>
+    </tr>
+    <tr>
+      <td>S2</td>
+      <td style="text-align: center">1</td>
+      <td style="text-align: center">1</td>
+      <td style="text-align: center">0</td>
+    </tr>
+    <tr>
+      <td>S3</td>
+      <td style="text-align: center">0</td>
+      <td style="text-align: center">1</td>
+      <td style="text-align: center">1</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>It's easiest to view the columns as constraints that must be satisfied. In this case, we need an A, B, and C. Our goal is to condense this into an empty matrix, showing that all constraints have been satisfied.</p>
+
+<p>We proceed by eliminating a row, placing it in our temporary solution. When we eliminate a row, we remove the constraints that it satisfies (the columns where it has a 1). When we remove those constraints, we also eliminate other rows that satisfy the constraint.</p>
+
+<p>For example, if we include S2 in our temporary solution then constraints A and B are satisfied. Columns A and B will be removed. Since A and B have been satisfied, we must remove all other rows that also satisfy them as otherwise we'd have overlap. Thus, S1 and S3 are also eliminated. We are left with C as an unsatisfied constraint and no potential solutions left, so S2 was an incorrect choice and we must backtrack and try again.</p>
+
+<p>While the algorithm is solid, the runtime isn't particularly good if it's implemented as a multidimensional array. The problem is that it's likely to be a large sparse matrix, so we'll end up spending a lot of time just iterating over a row or column looking for the next position that has a 1.</p>
+
+<p>Dancing Links is a clever implementation strategy centered around the operation of removing and reinserting a node in a circular doubly-linked list. Essentially, you can pop the node out such that it's no longer in the list, but knows where it should go if you need to shove it back in later. By using this little trick and modeling the matrix as circular, four direction, doubly linked list (a torus, or donut shape) we can improve the complexity of finding the next 1 from O(N) to O(1).</p>
+
+<p>So the only thing left to do is fit Sudoku onto the exact cover problem. For that we need an initial matrix that represents the standard 9x9 Sudoku game.</p>
+
+<p>For determining columns, there are four constraints that we have to account for: each box, row, and column must have the numbers 1-9 exactly once, and each cell can only have one number (no cheating by writing in two and leaving another cell empty or some such). Each of these four constraints is actually going to break down into 81 individual constraints for a total of 324 columns.</p>
+
+<p>For determining rows, we must list every valid position for each number. This is going to be 9 rows * 9 cols * 9 numbers for a total of 729 rows.</p>
+
+<p>Once we create the necessary structure, we can remove the rows representing initially filled positions and solve it as a normal exact cover problem with DLX. As we add solutions to our temporary set we keep track of the row name, then just use that after termination to print out a solution (if one exists).</p>
+
+<p>And that's about it! It really is a very cool implementation technique, and exact cover relates to a number of other interesting problems, so if you've got some time to spare I'd highly suggest flipping through Knuth's paper.</p>
+
+  </div>
+
+  <a class="u-url" href="/2020/09/08/dlx-redux.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1"><a class="u-email" href="mailto:eli@siliconsprawl.com">eli@siliconsprawl.com</a></div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/elindsey"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a href="https://www.linkedin.com/in/elilind"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#linkedin"></use></svg></a></li><li><a href="/feed.xml"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
+

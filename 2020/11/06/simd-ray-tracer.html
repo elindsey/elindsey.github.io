@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo="><!-- Begin Jekyll SEO tag v2.6.1 -->
+<title>Rust Ray Tracer, an Update (and SIMD) | silicon_sprawl_</title>
+<meta name="generator" content="Jekyll v4.0.1" />
+<meta property="og:title" content="Rust Ray Tracer, an Update (and SIMD)" />
+<meta name="author" content="Eli Lindsey" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="About a month ago I ported my C99 ray tracer side project to Rust. The initial port went smoothly, and I’ve now been plugging away adding features and repeatedly rewriting it in my spare hours. In parallel I’m getting up to speed on a large, production Rust codebase at work. The contrast between the two has been interesting - I have almost entirely positive things to say about Rust for large, multi-threaded codebases, but it hasn’t been as good of a fit for the ray tracer." />
+<meta property="og:description" content="About a month ago I ported my C99 ray tracer side project to Rust. The initial port went smoothly, and I’ve now been plugging away adding features and repeatedly rewriting it in my spare hours. In parallel I’m getting up to speed on a large, production Rust codebase at work. The contrast between the two has been interesting - I have almost entirely positive things to say about Rust for large, multi-threaded codebases, but it hasn’t been as good of a fit for the ray tracer." />
+<link rel="canonical" href="https://siliconsprawl.com/2020/11/06/simd-ray-tracer.html" />
+<meta property="og:url" content="https://siliconsprawl.com/2020/11/06/simd-ray-tracer.html" />
+<meta property="og:site_name" content="silicon_sprawl_" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-11-06T00:00:00+00:00" />
+<script type="application/ld+json">
+{"datePublished":"2020-11-06T00:00:00+00:00","author":{"@type":"Person","name":"Eli Lindsey"},"description":"About a month ago I ported my C99 ray tracer side project to Rust. The initial port went smoothly, and I’ve now been plugging away adding features and repeatedly rewriting it in my spare hours. In parallel I’m getting up to speed on a large, production Rust codebase at work. The contrast between the two has been interesting - I have almost entirely positive things to say about Rust for large, multi-threaded codebases, but it hasn’t been as good of a fit for the ray tracer.","url":"https://siliconsprawl.com/2020/11/06/simd-ray-tracer.html","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://siliconsprawl.com/2020/11/06/simd-ray-tracer.html"},"headline":"Rust Ray Tracer, an Update (and SIMD)","dateModified":"2020-11-06T00:00:00+00:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://siliconsprawl.com/feed.xml" title="silicon_sprawl_" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">silicon_sprawl_</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about.html">about</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Rust Ray Tracer, an Update (and SIMD)</h1>
+    <p class="post-meta"></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>About <a href="/2020/09/27/rust-ray-tracer.html">a month ago</a> I ported my C99 ray
+tracer side project to Rust. The initial port went smoothly, and I’ve now
+been plugging away adding features and repeatedly rewriting it in my spare hours.
+In parallel I’m getting up to speed on a large, production Rust codebase at work.
+The contrast between the two has been interesting - I have almost
+entirely positive things to say about Rust for large, multi-threaded
+codebases, but it hasn’t been as good of a fit for the ray tracer.</p>
+
+<p>It’s not a <em>bad</em> fit, but C/C++ are almost perfectly suited for this domain. Many of
+Rust’s flagship features aren’t applicable and/or get in the way - for
+example, the borrow checker doesn’t get me anything that ASAN wouldn’t in
+this specific use case, though does cause some additional headaches.</p>
+
+<p>What follows are a few of the quirks I’ve come across.</p>
+
+<h2 id="overhead-of-thread-locals">Overhead of Thread Locals</h2>
+
+<p>There was a <a href="https://matklad.github.io/2020/10/03/fast-thread-locals-in-rust.html">recent blog post</a>
+about this, so I won’t get into it very much.</p>
+
+<p>Suffice to say that thread locals in C already have more overhead than I’d
+like since they introduce a level of indirection on use, and the additional
+overhead of lazy initialization is significant. I found myself golfing down
+TLS access whereever possible (“I’ll persist this in TLS, but copy it out
+to/write it back from the stack”).</p>
+
+<p>Nightly has <a href="https://github.com/rust-lang/rust/issues/29594">an attribute</a>
+that can be used to get a barebones thread local, but I’m trying to avoid
+nightly if possible.</p>
+
+<p>Ultimately I got rid of TLS use entirely, but it meant moving away from rayon.</p>
+
+<h2 id="difficulty-of-expressing-mutable-array-access">Difficulty of expressing mutable array access</h2>
+
+<p>At its core a ray tracer is a giant array of pixels. You read a
+pixel, do some math, and write it back. This is trivial to parallelize by
+assigning disjoint sets of indices to threads, but often ends up being a
+little difficult to express in Rust. In particular, non-contiguous,
+cross-thread write access seems impossible to model safely without doing a
+copy pass over the array (ie. using split to slice it up into contiguous owned
+chunks, then later copying/rearranging it into the required non-contiguous order).</p>
+
+<p>This makes it a bit annoying to write a tile-based instead of row or pixel-based tracer.</p>
+
+<h2 id="undefined-undefined-behavior">‘Undefined’ Undefined Behavior</h2>
+
+<p>I’ve found it hard to tell what is and isn’t undefined behavior in Rust.
+There’s the <a href="https://doc.rust-lang.org/nomicon/">Rustonomicon</a>, but it’s
+sparse in places. In particular, I don’t have a good feel for what transmutes
+are and aren’t safe. One route is to outsource all that concern to something
+like <a href="https://crates.io/crates/bytemuck">bytemuck</a> and let
+<a href="https://github.com/Lokathor">Lokathor</a> worry about it. But for this project
+I’ve been avoiding taking deps unless completely necessary, because…</p>
+
+<h2 id="compilation-speed">Compilation speed</h2>
+
+<p>…compilation speed is atrocious. My work builds take an ungodly amount of
+time. I’ve been very picky about dependent libraries to keep this ray
+tracer’s incremental build as low as possible.</p>
+
+<h2 id="operator-overloading-and-numeric-traits">Operator overloading and numeric traits</h2>
+
+<p>I used to dismiss operator overloading as a frivolous feature, but it’s been
+valuable for floating point and SIMD math. Compilers
+generally aren’t going to do as much algebraic rearranging/simplification
+with those types, and it’s much easier to notice and tease out shared
+operations when operator overloading is used. That said, I would love to
+be able to do arbitrary overrides for <code class="highlighter-rouge">&lt;</code>, <code class="highlighter-rouge">&gt;</code>, etc. because SIMD types
+aren’t a good fit for <code class="highlighter-rouge">std::cmp::PartialOrd</code>.</p>
+
+<p>As much as I like traits and bounded generics, they’ve been 
+painful when it comes to numeric types. A core type in my ray tracer is <code class="highlighter-rouge">Vec3</code>,
+a struct of three <code class="highlighter-rouge">f32s</code>. I wanted to make it generic across a SIMD type to let
+me work with 8 <code class="highlighter-rouge">Vec3s</code> at once, so instead of three <code class="highlighter-rouge">f32s</code> it would have three
+8-wide <code class="highlighter-rouge">f32s</code> in struct-of-arrays form. This proved to be… not worth the
+hassle. In C++ I could write the <code class="highlighter-rouge">Vec3</code> logic (dot product, cross product,
+etc.) as usual, parameterize it by <code class="highlighter-rouge">f32</code> or <code class="highlighter-rouge">f32x8</code>, then go implement whatever
+mathematical overloads were missing. In Rust I need a set of unified traits
+between <code class="highlighter-rouge">f32</code> and <code class="highlighter-rouge">f32x8</code>. Either I need to define that unified trait myself,
+which is a lot of boilerplate, or I can use something like <a href="https://crates.io/crates/num">the num
+crate</a>, which would require implementing more
+functionality than I actually use (and some of which isn’t applicable to
+SIMD).</p>
+
+<p>Ultmately I didn’t bother.</p>
+
+<h2 id="rayon">Rayon</h2>
+
+<p>Rayon is a fantastic library. It was much nicer to work with than OpenMP,
+and <code class="highlighter-rouge">iter_bridge</code> makes it dead simple to plug in anywhere.</p>
+
+<p>Ultimately I ditched it for two reasons:</p>
+<ol>
+  <li>I couldn’t find a way to directly control thread init, which meant I
+couldn’t replace my thread locals with stack variables. You can mostly get around this
+by using the <code class="highlighter-rouge">_init</code> methods that take a closure, reading a thread local onto
+the stack then writing it back when the thread finishes its jobs.</li>
+  <li>It does far more than I need, which came out in a number of small ways -
+like making profiler output harder to read because of a large number of
+nested joins.</li>
+</ol>
+
+<p>I ultimately switched to using crossbeam directly, spinning up my own thread
+pool reading off of a simple mpmc queue. Interestingly this is as fast as
+rayon with <code class="highlighter-rouge">iter_bridge</code>, but is measurably slower than rayon’s custom
+parallel iterators for <code class="highlighter-rouge">Vecs</code>. I’m still looking at why exactly that is, but it
+seems like rayon is doing a better job of load-balancing work. Ray tracers
+have a large number of pixels that can be processed in parallel, but each
+pixel has a variable amount of work, so you need to strike a balance between
+making batches too big (then one thread finishes early and you don’t fully
+utilize the machine) and too small (more thread contention to grab jobs). I
+need to add logging to rayon’s join splitting, but my hunch is that it’s
+doing a better job of keeping the batch size as high as possible without
+causing cores to go idle.</p>
+
+<p>Update: See <a href="/2020/11/09/rust-emit-asm.html">this post</a> for more
+investigation of the performance regression.</p>
+
+<h2 id="simd">SIMD</h2>
+
+<p>There are a few different places where SIMD is applicable in a ray tracer:</p>
+
+<ul>
+  <li>Do <code class="highlighter-rouge">Vec3</code> operations in SIMD. This is a common initial idea, <a href="https://fgiesen.wordpress.com/2016/04/03/sse-mind-the-gap/">but it’s not
+particularly
+fruitful</a>.</li>
+  <li>Process multiple pixels or multiple rays for the same
+pixel in SIMD. This is very useful, though requires writing SIMD versions
+of some libm functions (notably trig functions). It’s also where you start
+hitting ray coherency problems - if you shoot 8 rays in a batch at roughly
+the same area of the scene, it’s likely that they’ll behave similarly. But as
+soon as they hit an object and bounce they all head in different directions,
+and pretty quickly you end up with dead lanes. Unless your scene is very
+simple that’s still going to be a net win. Then coherency issues can come up
+<em>again</em> once you’ve calculated your hits and need to process materials - a
+ray of light hitting a lake leads to very different math from a ray of light
+hitting a tree. A good strategy for dealing with such things is to switch
+from doing a depth-first traversal of the scene to breadth-first, letting you
+accumulate enough state to batch likes with likes and pull, say, ‘8 tree
+hits’, ‘8 water hits’, etc. from the work queue all at once. The tradeoff is
+now you have a significant amount of additional memory use and possibly more
+thread synchronization, so it’s easy to accidentally make everything worse
+and slower (I’ve heard it’s more effective on GPUs, but know less about
+that). One very good paper on this style of optimized breadth-first CPU ray
+tracing is <a href="https://www.embree.org/papers/2016-HPG-shading.pdf">this one</a>
+from Intel.</li>
+  <li>Perform intersection checks for a single ray in SIMD. This isn’t as big 
+of an improvement as the former, but given the effort it has great bang for your buck. Most of the work to add SIMD
+was defining pass-through functions for intrinsics, with a few gnarlier ones
+here and there (eg. hmin). The trickier optimization work came from going
+back over the code and looking for any small places that I could simplify the
+calculations - little things like removing a negation or redundant multiply,
+switching to fma, etc. added up to substantial improvements.</li>
+</ul>
+
+<p>This was my first time using AVX2, and I didn’t realize it’s essentially
+“SSE but bigger.” In particular I was surprised that you can’t permute across
+128-bit lanes.</p>
+
+<p>Other surprises were that rsqrt with a refinement iteration
+was slower than simply calling sqrt (though the Intel optimization manual did
+warn me about this on Skylake - I have so much other math going on that it led
+to port contention). And the cost of float conversions add up very quickly -
+initially I was lazy and only implemented an 8-wide <code class="highlighter-rouge">f32</code> type, then would cast
+in/out if I needed some integer type instead. Adding a proper <code class="highlighter-rouge">i32x8</code> got me a
+few percentage points of runtime improvement.</p>
+
+<p>Rust’s current SIMD support is the absolute bare minimum. Intrinsics are exposed, all must be
+used in unsafe, and if you dig you can find some docs on <code class="highlighter-rouge">repr(simd)</code>.
+There’s also a smattering of SIMD crates, some
+<a href="https://crates.io/crates/wide">good</a>, some bad, some seemingly unmaintained.
+There’s nothing as complete or useful as <a href="https://github.com/vectorclass/version2">Agner Fog’s
+VCL</a>. There <em>is</em> however <a href="https://github.com/rust-lang/project-portable-simd">an active
+working group</a> adding
+portable SIMD abstractions to the core. That’s very exciting, and looks like it’s shaping up
+nicely.</p>
+
+<h2 id="debugging">Debugging</h2>
+
+<p>Debugging ray tracers is surprisingly fun; you end up with a lot of “how on earth did <em>that</em> happen” moments. Here are a few of my recent head scratchers:</p>
+
+<h3 id="reference-image">Reference Image</h3>
+<p><img src="/assets/images/rrt/reference1.png" alt="" /></p>
+
+<p>This is my current reference scene. Not too exciting - I need to invest some time in building out a more complex scene and possibly adding obj/triangle support. But the performance work tends to be more fun.</p>
+
+<h3 id="blurred">Blurred</h3>
+<p><img src="/assets/images/rrt/bad_blur1.png" alt="" /></p>
+
+<p>I have no idea what happened here. I found this in my output folder over the course of doing the refactor from rayon to crossbeam, so I don’t know exactly what broke - but I thought it was neat.</p>
+
+<h3 id="ripples">Ripples</h3>
+<p><img src="/assets/images/rrt/bad_fp1.png" alt="" /></p>
+
+<p>This came from some bad floating point math - I think I messed up the intersection calculation in some way, but don’t remember exactly how. I thought the ripple effect was kinda fun.</p>
+
+<h3 id="fun-house-mirrors">Fun House Mirrors</h3>
+<p><img src="/assets/images/rrt/bad_normalize1.png" alt="" /></p>
+
+<p>“Maybe I don’t need to normalize my vectors here…”</p>
+
+<p><em>tries it</em></p>
+
+<p>“Nope, I definitely need to normalize there.”</p>
+
+<h3 id="inside-out">Inside Out</h3>
+<p><img src="/assets/images/rrt/bad_sqrt1.png" alt="" /></p>
+
+<p>This came from trying to use a fast inverse sqrt without a refinement step. A lot of my intersections were messed up, so rays ended up bouncing around <em>inside</em> objects and things got weird.</p>
+
+
+  </div>
+
+  <a class="u-url" href="/2020/11/06/simd-ray-tracer.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1"><a class="u-email" href="mailto:eli@siliconsprawl.com">eli@siliconsprawl.com</a></div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/elindsey"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a href="https://www.linkedin.com/in/elilind"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#linkedin"></use></svg></a></li><li><a href="/feed.xml"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
+

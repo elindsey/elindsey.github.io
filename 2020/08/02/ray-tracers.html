@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:;base64,iVBORw0KGgo="><!-- Begin Jekyll SEO tag v2.6.1 -->
+<title>Learning About Ray Tracing | silicon_sprawl_</title>
+<meta name="generator" content="Jekyll v4.0.1" />
+<meta property="og:title" content="Learning About Ray Tracing" />
+<meta name="author" content="Eli Lindsey" />
+<meta property="og:locale" content="en_US" />
+<meta name="description" content="I’ve had more time than usual for side projects since I’ve been stuck inside the past few months. I spent the majority of June digging into graphics, getting acquainted with the field by building a ray tracer. The initial version is now online as ecl_rt." />
+<meta property="og:description" content="I’ve had more time than usual for side projects since I’ve been stuck inside the past few months. I spent the majority of June digging into graphics, getting acquainted with the field by building a ray tracer. The initial version is now online as ecl_rt." />
+<link rel="canonical" href="https://siliconsprawl.com/2020/08/02/ray-tracers.html" />
+<meta property="og:url" content="https://siliconsprawl.com/2020/08/02/ray-tracers.html" />
+<meta property="og:site_name" content="silicon_sprawl_" />
+<meta property="og:type" content="article" />
+<meta property="article:published_time" content="2020-08-02T00:00:00+00:00" />
+<script type="application/ld+json">
+{"datePublished":"2020-08-02T00:00:00+00:00","author":{"@type":"Person","name":"Eli Lindsey"},"description":"I’ve had more time than usual for side projects since I’ve been stuck inside the past few months. I spent the majority of June digging into graphics, getting acquainted with the field by building a ray tracer. The initial version is now online as ecl_rt.","url":"https://siliconsprawl.com/2020/08/02/ray-tracers.html","@type":"BlogPosting","mainEntityOfPage":{"@type":"WebPage","@id":"https://siliconsprawl.com/2020/08/02/ray-tracers.html"},"headline":"Learning About Ray Tracing","dateModified":"2020-08-02T00:00:00+00:00","@context":"https://schema.org"}</script>
+<!-- End Jekyll SEO tag -->
+<link rel="stylesheet" href="/assets/main.css"><link type="application/atom+xml" rel="alternate" href="https://siliconsprawl.com/feed.xml" title="silicon_sprawl_" /></head>
+<body><header class="site-header" role="banner">
+
+  <div class="wrapper"><a class="site-title" rel="author" href="/">silicon_sprawl_</a><nav class="site-nav">
+        <input type="checkbox" id="nav-trigger" class="nav-trigger" />
+        <label for="nav-trigger">
+          <span class="menu-icon">
+            <svg viewBox="0 0 18 15" width="18px" height="15px">
+              <path d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0 h15.032C17.335,0,18,0.665,18,1.484L18,1.484z M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0 c0-0.82,0.665-1.484,1.484-1.484h15.032C17.335,6.031,18,6.696,18,7.516L18,7.516z M18,13.516C18,14.335,17.335,15,16.516,15H1.484 C0.665,15,0,14.335,0,13.516l0,0c0-0.82,0.665-1.483,1.484-1.483h15.032C17.335,12.031,18,12.695,18,13.516L18,13.516z"/>
+            </svg>
+          </span>
+        </label>
+
+        <div class="trigger"><a class="page-link" href="/about.html">about</a></div>
+      </nav></div>
+</header>
+<main class="page-content" aria-label="Content">
+      <div class="wrapper">
+        <article class="post h-entry" itemscope itemtype="http://schema.org/BlogPosting">
+
+  <header class="post-header">
+    <h1 class="post-title p-name" itemprop="name headline">Learning About Ray Tracing</h1>
+    <p class="post-meta"></p>
+  </header>
+
+  <div class="post-content e-content" itemprop="articleBody">
+    <p>I’ve had more time than usual for side projects since I’ve been stuck inside
+the past few months. I spent the majority of June digging into graphics, getting
+acquainted with the field by building a ray tracer. The initial version is now
+online as <a href="https://github.com/elindsey/ecl_rt_legacy">ecl_rt</a>.</p>
+
+<p>Rather than write yet another post about building a ray tracer, I’ll point to
+the handful of resources (from the multitude available) that were actually useful:</p>
+
+<ul>
+  <li>
+    <p><a href="https://raytracing.github.io">Ray Tracing in One Weekend</a> is the canonical
+introductory tutorial. I didn’t love it - I wasn’t on board with the code
+structure and found it very light on explanation. I still think it’s a decent
+way to get something on the screen fast, so I’d recommend going through it
+quickly to get a prototype working and then move on.</p>
+  </li>
+  <li>
+    <p><a href="https://www.pbrt.org">Physically Based Rendering</a> is dense and long, but
+also deep, insightful, and a pleasure to read. I wish I had picked it up
+earlier instead of spending so much time on various other books/tutorials. In
+general, I think you should do the minimum amount of work to get something on
+the screen and get the basic background knowledge to understand this book, then
+simply work through PBRT cover to cover. It’s incredible that the whole thing
+is available online for free (though I’d recommend picking up a physical copy
+if you expect you’ll be spending a lot of time with it).</p>
+  </li>
+  <li>
+    <p><a href="https://aras-p.info/blog/2018/03/28/Daily-Pathtracer-Part-0-Intro/">Aras’ blog series on path
+tracers</a>
+is a lot of fun.  He implemented a ray tracer in every imaginable way; it makes
+for great reading to compare some of the paths I didn’t take (eg. Metal or
+other modern GPU frameworks).</p>
+  </li>
+</ul>
+
+<p>There’s a lot of work left, but it’s still fun to look at how far things have
+come. Here’s a few images showing the evolution of my ray tracer’s output, from
+the very first image it rendered to the current state:</p>
+
+<p><img src="/assets/images/rt/1.png" alt="" /></p>
+
+<p><img src="/assets/images/rt/2.png" alt="" /></p>
+
+<p><img src="/assets/images/rt/3.png" alt="" /></p>
+
+<p><img src="/assets/images/rt/4.png" alt="" /></p>
+
+<p><img src="/assets/images/rt/5.png" alt="" /></p>
+
+<p><img src="/assets/images/rt/6.png" alt="" /></p>
+
+
+  </div>
+
+  <a class="u-url" href="/2020/08/02/ray-tracers.html" hidden></a>
+</article>
+
+      </div>
+    </main><footer class="site-footer h-card">
+  <data class="u-url" href="/"></data>
+
+  <div class="wrapper">
+
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1"><a class="u-email" href="mailto:eli@siliconsprawl.com">eli@siliconsprawl.com</a></div>
+
+      <div class="footer-col footer-col-2"><ul class="social-media-list"><li><a href="https://github.com/elindsey"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#github"></use></svg></a></li><li><a href="https://www.linkedin.com/in/elilind"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#linkedin"></use></svg></a></li><li><a href="/feed.xml"><svg class="svg-icon"><use xlink:href="/assets/minima-social-icons.svg#rss"></use></svg></a></li></ul>
+</div>
+    </div>
+
+  </div>
+
+</footer>
+</body>
+
+</html>
+
