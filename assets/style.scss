@@ -330,6 +330,7 @@ table {
     list-style: none;
     margin-right: 0;
     > li {
+        vertical-align: middle;
         display: inline-block;
     }
     li + li {
