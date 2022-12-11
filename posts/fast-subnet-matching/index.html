@@ -1,0 +1,169 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><link rel=icon href=data:,%89PNG%0D%0A%1A%0A><link rel=stylesheet href=/style.css><link rel=canonical href=https://siliconsprawl.com/posts/fast-subnet-matching/><title>Fast Subnet Matching</title><meta name=author content="Eli Lindsey"><meta property="og:title" content="Fast Subnet Matching"><meta property="og:description" content="Determining if a subnet contains a given IP is a fundamental operation in networking. Router dataplanes spend all of their time looking up prefix matches to make forwarding decisions, but even higher layers of application code need to perform this operation - for example, looking up a client IP address in a geographical database or checking a client IP against an abuse blocklist.
+Routers have extremely optimized implementations, but since these other uses may be one-off codepaths in a higher-level language (eg."><meta property="og:type" content="article"><meta property="og:url" content="https://siliconsprawl.com/posts/fast-subnet-matching/"><meta property="article:section" content="posts"><meta property="article:published_time" content="2020-06-07T00:00:00+00:00"><meta property="article:modified_time" content="2020-06-07T00:00:00+00:00"></head><body><header role=banner class=site-header><div class=wrapper><a class=site-title href=https://siliconsprawl.com>silicon_sprawl_</a><nav class=site-nav><a class=page-link href=/about/ title=about>about</a></nav></div></header><main class=page-content><div class=wrapper><article><header class=post-header><h1 class="post-title p-name">Fast Subnet Matching</h1></header><div class="post-content e-content"><p>Determining if a subnet contains a given IP is a fundamental operation in
+networking. Router dataplanes spend all of their time looking up prefix matches
+to make forwarding decisions, but even higher layers of application code need
+to perform this operation - for example, looking up a client IP address in a
+geographical database or checking a client IP against an abuse blocklist.</p><p>Routers have extremely optimized implementations, but since these other uses
+may be one-off codepaths in a higher-level language (eg. some random Go
+microservice), they&rsquo;re not written with the same level of care and
+optimization. Sometimes they&rsquo;re written with no care or optimization at all
+and quickly become bottlenecks.</p><p>Here&rsquo;s a list of basic techniques and tradeoffs to reference next time you need
+to implement this form of lookup; I hope it&rsquo;s useful in determining a good
+implementation for the level of optimization you need.</p><h3 id=multiple-subnets>Multiple Subnets</h3><p>If you have multiple subnets and want to determine which of them match a given
+IP (eg. longest prefix match), you should be reaching for something in the trie
+family. I won&rsquo;t cover the fundamentals here, but do recommend <em>The Art of
+Computer Programming, Vol. 3</em> for an overview.</p><p>Be extremely skeptical of any off-the-shelf radix libraries:</p><ol><li>Many do not do prefix compression</li><li>Many support N instead of two edges, which may lead to unnecessary memory overhead</li><li>Many will operate on some form of string type to be as generic as possible, again contributing to memory overhead</li><li>All be difficult to adapt to different stride lengths</li></ol><p>I would highly recommend writing your own implementation if performance is a
+concern at all. Most common implementations are either too generic or are optimized
+for exact instead of prefix match.</p><h4 id=unibit-to-multibit-to-compressed>unibit to multibit to compressed</h4><p>A radix 2 trie that does bit-by-bit comparison with compression for empty nodes
+is a good starting point. To further speed it up, you&rsquo;ll want to compare more
+than one bit at a time - this is typically referred to as a multibit stride.</p><p>Multibit strides will get you significantly faster lookup time at the cost of
+some memory - in order to align all comparisons on the stride size, you&rsquo;ll need
+to expand some prefixes.</p><p>As an example, let&rsquo;s say you&rsquo;re building a trie that contains three prefixes:</p><ul><li>Prefix 1: 01*</li><li>Prefix 2: 110*</li><li>Prefix 3: 10*</li></ul><p>A unibit trie would look like this:</p><p><img src=unibit.png alt="unibit trie diagram"></p><p>If instead we want to use a multibit trie with a stride of two bits, then
+prefix 2 needs to be expanded into its two sub-prefixes, 1101* and 1100*. Our
+multibit trie would look like this:</p><p><img src=multibit.png alt="multibit trie diagram"></p><p>Note how this trie has incresed our memory usage by duplicating prefix 2, but
+has reduced our memory accesses and improved locality (there are far fewer
+pointers chased in this diagram), thus trading memory usage for lookup
+performance.</p><p>Most of the time a multibit trie is where you can stop. If you need to optimize
+further, especially if you need to start reducing memory usage, then you&rsquo;ll
+want to explore the literature on compressed tries. The general idea with many
+of these is to use a longer or adaptive stride, but find clever ways to remove
+some of the redundancy it introduces. Starting points include LC-tries, Luleå
+tries, and tree bitmaps.</p><h4 id=modified-traversals>Modified traversals</h4><p>There are some common, related problems that can be solved by small
+modifications to the traversal algorithm:</p><ul><li>If instead of finding the longest
+prefix match you need to find all containing subnets, simply keep track of the
+list of all matching nodes instead of the single most recent node as you
+traverse and return the full set at the end.</li><li>If you need to match a containing subnet on some criteria other than most
+specific match, for example declaration order from a config file, express this
+as a numerical priority and persist it alongside the node. As you traverse,
+keep track of the most recently visited node and only replace it if the
+currently visited is a higher priority.</li></ul><h4 id=sidenote-on-patricia-tries>Sidenote on PATRICIA tries</h4><p>PATRICIA tries are a radix 2 trie that saves a
+count of bits skipped instead of the full substring when doing compression. You
+don&rsquo;t want this! They&rsquo;re great for exact match lookup, like what you&rsquo;d want in
+a trie of filenames, but saving only the skip count causes prefix matches to
+backtrack, resulting in significantly worse performance. It&rsquo;s unfortunate that
+they&rsquo;re so often associated with networking; in some cases the name is misused
+and people say PATRICIA when they simple mean radix 2.</p><h3 id=single-subnet>Single Subnet</h3><p>If you have a large number of IPs and want to check if a single subnet contains
+them, spend a little time looking at your assembler output to choose a good
+implementation. If available, you&rsquo;re best off using 128-bit literals to support
+IPv6. C, C++, Rust, and many systems languages will support this.
+Unfortunately Go and Java do not, so you&rsquo;ll have to piece it together with two
+64-bit integers - slightly cumbersome, and slightly more overhead as we&rsquo;ll see.</p><p>In IPv4, subnet contains checking is easy since everything fits in a word,
+roughly:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:green>// checking if 1.2.3.0/8 contains 1.2.3.4
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint32_t</span> prefix = 0x01020300; <span style=color:green>// prefix address, packed big endian
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint32_t</span> client = 0x01020304; <span style=color:green>// client address, packed big endian
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint8_t</span> mask = 8; <span style=color:green>// netmask, range 0-32
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint32_t</span> bitmask = 0xFFFFFFFF &lt;&lt; (32 - mask); <span style=color:green>// invert the mask to get a count of number of zeros
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#00f>if</span> ( (prefix &amp; bitmask) == (client &amp; bitmask) ) {
+</span></span><span style=display:flex><span>    <span style=color:green>// subnet contains client
+</span></span></span><span style=display:flex><span><span style=color:green></span>}
+</span></span></code></pre></div><p>IPv6 is when things get interesting. 128-bit long IPv6 addresses means juggling
+two machine words. In computing the bitmask we need a mask for the upper and
+the lower portion of the address.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#2b91af>uint64_t</span> upper_prefix, lower_prefix, upper_client, lower_client = ; <span style=color:green>// assume these are initialized
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint8_t</span> mask = ;<span style=color:green>// netmask, range 0-128
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint64_t</span> upper_bitmask = UINT64_MAX;
+</span></span><span style=display:flex><span><span style=color:#2b91af>uint64_t</span> lower_bitmask = UINT64_MAX;
+</span></span><span style=display:flex><span><span style=color:#00f>if</span> (mask &lt; 64) {
+</span></span><span style=display:flex><span>    lower_bitmask &lt;&lt;= mask;
+</span></span><span style=display:flex><span>} <span style=color:#00f>else</span> {
+</span></span><span style=display:flex><span>    upper_bitmask = lower_bitmask &lt;&lt; (64 - mask);
+</span></span><span style=display:flex><span>    lower = 0;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#00f>if</span> ((upper_prefix &amp; upper_bitmask) == (upper_client &amp; upper_bitmask) 
+</span></span><span style=display:flex><span>    &amp;&amp; (lower_prefix &amp; lower_bitmask) == (lower_client &amp;&amp; lower_bitmask)) {
+</span></span><span style=display:flex><span>    <span style=color:green>// subnet contains client
+</span></span></span><span style=display:flex><span><span style=color:green></span>}
+</span></span></code></pre></div><p>Rewriting with gcc/clang&rsquo;s int128 emulated type:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>__uint128 prefix, client = ; <span style=color:green>// assume these are initialized
+</span></span></span><span style=display:flex><span><span style=color:green></span><span style=color:#2b91af>uint8_t</span> mask = ;<span style=color:green>// netmask, range 0-128
+</span></span></span><span style=display:flex><span><span style=color:green></span>__uint128 bitmask = std::numeric_limits&lt;__uint128_t&gt;::max() &lt;&lt;= (128 - mask);
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#00f>if</span> ( (prefix &amp; bitmask) == (client &amp; bitmask) ) {
+</span></span><span style=display:flex><span>    <span style=color:green>// subnet contains client
+</span></span></span><span style=display:flex><span><span style=color:green></span>}
+</span></span></code></pre></div><p>The emulated int128s are much easier to read and work with, but how does performance compare?</p><p>Here is the source code and <a href=https://godbolt.org/z/afNGvT>Godbolt link</a> for a
+small test, isolating just the shift portion:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span><span style=color:#00f>#include</span> <span style=color:#00f>&lt;cstdint&gt;</span><span style=color:#00f>
+</span></span></span><span style=display:flex><span><span style=color:#00f></span>
+</span></span><span style=display:flex><span>__int128 shift128(<span style=color:#2b91af>uint8_t</span> shift) {
+</span></span><span style=display:flex><span>    __int128 t = -1;
+</span></span><span style=display:flex><span>    t &lt;&lt;= shift; 
+</span></span><span style=display:flex><span>    <span style=color:#00f>return</span> t;
+</span></span><span style=display:flex><span>}
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span><span style=color:#00f>struct</span> Pair {
+</span></span><span style=display:flex><span>    <span style=color:#2b91af>uint64_t</span> first, second;
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>Pair shift64(<span style=color:#2b91af>uint8_t</span> shift) {
+</span></span><span style=display:flex><span>    <span style=color:#2b91af>uint64_t</span> upper = -1;
+</span></span><span style=display:flex><span>    <span style=color:#2b91af>uint64_t</span> lower = -1;
+</span></span><span style=display:flex><span>    <span style=color:#00f>if</span> (shift &lt; 64) {
+</span></span><span style=display:flex><span>        lower &lt;&lt;= shift;
+</span></span><span style=display:flex><span>    } <span style=color:#00f>else</span> {
+</span></span><span style=display:flex><span>        upper = lower &lt;&lt; (shift - 64);
+</span></span><span style=display:flex><span>        lower = 0;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#00f>return</span> Pair{upper, lower};
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><p>And here is the compiler&rsquo;s optimized x86 assembly with comments added:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gas data-lang=gas><span style=display:flex><span>shift128(unsigned char):
+</span></span><span style=display:flex><span>        mov     ecx, edi <span style=color:green>; load mask into ecx
+</span></span></span><span style=display:flex><span><span style=color:green></span>        mov     rax, -1 <span style=color:green>; initialize lower word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        xor     esi, esi <span style=color:green>; zero this register for use in cmov
+</span></span></span><span style=display:flex><span><span style=color:green></span>        mov     rdx, -1 <span style=color:green>; initialize upper word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        sal     rax, cl <span style=color:green>; shift lower word by mask
+</span></span></span><span style=display:flex><span><span style=color:green></span>        and     ecx, 64 <span style=color:green>; and our mask with 64
+</span></span></span><span style=display:flex><span><span style=color:green></span>        cmovne  rdx, rax <span style=color:green>; move lower word into upper
+</span></span></span><span style=display:flex><span><span style=color:green></span>        cmovne  rax, rsi <span style=color:green>; zero lower word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        ret
+</span></span><span style=display:flex><span>shift64(unsigned char):
+</span></span><span style=display:flex><span>        movzx   ecx, dil <span style=color:green>; load mask into ecx
+</span></span></span><span style=display:flex><span><span style=color:green></span>        cmp     dil, 63
+</span></span><span style=display:flex><span>        ja      .L4 <span style=color:green>; jump if mask is &gt;= 64
+</span></span></span><span style=display:flex><span><span style=color:green></span>        mov     rdx, -1 <span style=color:green>; initialize lower word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        mov     rax, -1 <span style=color:green>; initialize upper word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        sal     rdx, cl <span style=color:green>; shift lower word by mask
+</span></span></span><span style=display:flex><span><span style=color:green></span>        ret
+</span></span><span style=display:flex><span>.L4:
+</span></span><span style=display:flex><span>        sub     ecx, 64 <span style=color:green>; find out how much we need to shift the upper word by
+</span></span></span><span style=display:flex><span><span style=color:green></span>        mov     rax, -1 <span style=color:green>; initialize upper word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        xor     edx, edx <span style=color:green>; mask was &gt;64, so just zero the lower word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        sal     rax, cl <span style=color:green>; shift upper word
+</span></span></span><span style=display:flex><span><span style=color:green></span>        ret
+</span></span></code></pre></div><p>There are a few interesting things to note:</p><ol><li><code>sal</code> will automatically mask its shift operand to the appropriate range, so
+while it&rsquo;s undefined behavior in C to shift by more than the size of the
+target, this is fine at the asm level</li><li><code>and</code> with 64 is using knowledge of undefined behavior - our shift is only
+well-defined within the range of 1-127, so we assume UB is impossible and
+ignore the range outside.</li><li><code>cmov</code> is used instead of a jump. On modern hardware this should be strictly
+better, though is most noticeable when jumps are unpredictable. Our jumps
+should be very predictable here.</li></ol><p>If we wanted, we could rewrite the int64 version in a way that would more
+closely match the int128 assembly:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-c data-lang=c><span style=display:flex><span>Pair shift64_v2(<span style=color:#2b91af>uint8_t</span> shift) {
+</span></span><span style=display:flex><span>    <span style=color:#2b91af>uint64_t</span> upper = -1;
+</span></span><span style=display:flex><span>    <span style=color:#2b91af>uint64_t</span> lower = -1;
+</span></span><span style=display:flex><span>    lower &lt;&lt;= (shift &amp; 0x3F);
+</span></span><span style=display:flex><span>    <span style=color:#00f>if</span> (shift &gt; 0x3F) {
+</span></span><span style=display:flex><span>        upper = lower;
+</span></span><span style=display:flex><span>        lower = 0;
+</span></span><span style=display:flex><span>    }
+</span></span><span style=display:flex><span>
+</span></span><span style=display:flex><span>    <span style=color:#00f>return</span> Pair{upper, lower};
+</span></span><span style=display:flex><span>}
+</span></span></code></pre></div><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-gas data-lang=gas><span style=display:flex><span>shift64_v2(unsigned char):
+</span></span><span style=display:flex><span>        mov     ecx, edi
+</span></span><span style=display:flex><span>        mov     rdx, -1
+</span></span><span style=display:flex><span>        mov     rax, -1
+</span></span><span style=display:flex><span>        sal     rdx, cl
+</span></span><span style=display:flex><span>        cmp     dil, 63
+</span></span><span style=display:flex><span>        jbe     .L4
+</span></span><span style=display:flex><span>        mov     rax, rdx
+</span></span><span style=display:flex><span>        xor     edx, edx
+</span></span><span style=display:flex><span>.L4:
+</span></span><span style=display:flex><span>        ret
+</span></span></code></pre></div><p>Note how the assembly does not contain any explicit <code>and</code> with 0x3F, we&rsquo;ve
+merely communicated to the compiler that we want the <code>sal</code> instruction&rsquo;s
+default mask behvior. Our <code>cmov</code> has also been converted to <code>jmp</code>.</p><p>Previously I&rsquo;d hoped that I could use the 128-bit SSE registers and mm
+intrinsics to operate on IPv6 addresses natively. However, operations to use
+SSE registers as a single 128-bit value (as opposed to 2 64-bit values, 4
+32-bit values, etc.) are quite limited. In particular, <code>_mm_slli_si128</code> shifts
+by bytes instead of bits so won&rsquo;t work for our use case (though SIMD
+instructions would be useful for performing matches against multiple client IPs
+at once).</p></div></article></div></main><footer class="site-footer h-card"><div class=wrapper><div class=footer-col-wrapper><div class="footer-col footer-col-1"><a class=u-email href=mailto:eli@siliconsprawl.com>eli@siliconsprawl.com</a></div><div class="footer-col footer-col-2"><ul class=social-media-list><li><a href=https://github.com/elindsey><svg class="svg-icon"><use xlink:href="/social-icons.svg#github"/></svg></a></li><li><a href=https://www.linkedin.com/in/elilind><svg class="svg-icon"><use xlink:href="/social-icons.svg#linkedin"/></svg></a></li><li><a href=https://siliconsprawl.com/feed.xml><svg class="svg-icon"><use xlink:href="/social-icons.svg#rss"/></svg></a></li></ul></div></div></div></footer></body></html>

@@ -1,0 +1,151 @@
+<!doctype html><html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><link rel=icon href=data:,%89PNG%0D%0A%1A%0A><link rel=stylesheet href=/style.css><link rel=canonical href=https://siliconsprawl.com/posts/rust-emit-asm/><title>Rust emit=asm Can Be Misleading</title><meta name=author content="Eli Lindsey"><meta property="og:title" content="Rust emit=asm Can Be Misleading"><meta property="og:description" content="The short version Cargo builds like:
+$ RUSTFLAGS=&#34;--emit asm&#34; cargo build --release $ cargo rustc --release -- --emit asm Do not always output assembly equivalent to the machine code you&rsquo;d get from:
+$ cargo build --release Possibly rustc --emit=asm has some uses, like examining a single file with no external dependencies, but it&rsquo;s not useful for my normal case of wanting to look at the asm for an arbitrary release build."><meta property="og:type" content="article"><meta property="og:url" content="https://siliconsprawl.com/posts/rust-emit-asm/"><meta property="article:section" content="posts"><meta property="article:published_time" content="2020-11-09T00:00:00+00:00"><meta property="article:modified_time" content="2020-11-09T00:00:00+00:00"></head><body><header role=banner class=site-header><div class=wrapper><a class=site-title href=https://siliconsprawl.com>silicon_sprawl_</a><nav class=site-nav><a class=page-link href=/about/ title=about>about</a></nav></div></header><main class=page-content><div class=wrapper><article><header class=post-header><h1 class="post-title p-name">Rust emit=asm Can Be Misleading</h1></header><div class="post-content e-content"><h2 id=the-short-version>The short version</h2><p>Cargo builds like:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>$ RUSTFLAGS=<span style=color:#a31515>&#34;--emit asm&#34;</span> cargo build --release
+</span></span><span style=display:flex><span>$ cargo rustc --release -- --emit asm
+</span></span></code></pre></div><p>Do not always output assembly equivalent to the machine code you&rsquo;d get from:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>$ cargo build --release
+</span></span></code></pre></div><p>Possibly <code>rustc --emit=asm</code> has some uses, like examining a single file with
+no external dependencies, but it&rsquo;s not useful for my normal case of wanting
+to look at the asm for an arbitrary release build.</p><h2 id=the-long-version>The long version</h2><p><a href=/2020/11/06/simd-ray-tracer.html>Previously</a> I rewrote my ray tracer
+to use <code>crossbeam::scope</code> and <code>crossbeam::queue</code> instead of rayon. Internally
+rayon leans heavily on <code>crossbeam::deque</code> for its work-stealing implementation, so
+my expectation was that this change would be neutral or a slight improvement,
+depending on how good of a job the compiler had been doing to condense
+rayon&rsquo;s abstractions.</p><p>Instead it was a ~15% regression.</p><h3 id=looking-at-the-asm-pt-1>Looking at the asm, pt. 1</h3><p>The asm output appeared sane. I saw no expensive indirection, calls, etc. -
+things were getting properly inlined and optimized.</p><h3 id=understanding-rayon>Understanding rayon</h3><p>I first questioned my understanding of rayon and spent some time digging
+through its guts. It&rsquo;s well-engineered, and it&rsquo;s impressive that clang&rsquo;s able
+to condense all of its abstractions down into basically no overhead - but I also
+didn&rsquo;t see anything fundamentally novel or surprising going on that would give it a significant performance edge. The
+splitting/work assignment portion of the vec codepath looked like it would
+lead to slightly more even partitioning than my hand-built crossbeam method,
+but not by a lot, and definitely not by 15%. So that was bust. I did notice that
+crossbeam needed to heap allocate the closure I was using for my thread body,
+so perhaps that caused some additional overhead, but it should have been
+negligible.</p><h3 id=cpu-profiling>CPU profiling</h3><p>At this point I dumped both versions into Instruments and did some basic CPU
+profiling. rayon&rsquo;s a bit annoying to poke around in because you end up with
+extremely deep stacks of <code>join</code> frames, but nothing really stood out. The
+crossbeam version was simply slower with no major red flags.</p><h3 id=more-in-depth-cpu-profiling>More in-depth CPU profiling</h3><p>I&rsquo;d been looking for an excuse to try <a href=https://software.intel.com/content/www/us/en/develop/tools/vtune-profiler.html>Intel
+VTune</a>
+for awhile, but since it&rsquo;s only supported on Windows and Linux and is best
+run on bare-metal, it had always been slightly too much effort to stand up
+for smaller projects. It seemed warranted for this one! I had an existing
+Windows bootcamp partition, so figured I&rsquo;d see just how much hassle it was to
+get everything working in that before I dusted off something to run Linux.</p><p>Sidebar: turns out Rust on Windows is&mldr; really nice. I&rsquo;m not a Windows dev. There are
+things I admire about the ecosystem (like a good first-party
+debugger and some decent OS APIs), but apart from some Java way back in high
+school I&rsquo;ve never even tried to compile software on a Windows machine. It
+always looked like a nightmare for C/C++ projects - I&rsquo;m familiar enough with
+the code side of cross-platform support, but as for actually
+building things&mldr; I think cmake can spit out a Visual Studio project? And I
+keep hearing about WSL? So I went in with significant trepidation. Turns out
+it took all of ten minutes to install the VS C++ tools, rustup, a rust
+toolchain, vtune, and get everything building and working together. Pretty
+impressive.</p><p>VTune itself is a complex beast. Most (all?) of the data in it is stuff you
+could get out of <code>perf</code>, but the collection and workflow is streamlined - it
+does a good job of keeping track of previous runs, grouping them in a way so
+you don&rsquo;t lose anything, surfacing useful information based on top-level
+categories (eg. &ldquo;I want to look at memory access&rdquo;), and providing a
+diff view between runs. It looks particularly useful for guiding iterative optimization
+and refinement. It&rsquo;s a bit less useful when I&rsquo;m comparing the
+performance of two fairly different programs, because many of the stack
+traces are unique to either the rayon or crossbeam version, so &ldquo;you have 100%
+more of these rayon stack traces in this run&rdquo; is not helpful. Looking through
+the data I saw that I was getting flagged on uarch perf, retiring
+instructions maybe 5% worse in the crossbeam version. Thinking that could be
+stalling waiting on memory, I ran a memory access profile and saw:</p><p><img src=vtune_macc.png alt></p><p>Crossbeam version is on the left, rayon version is on the right. Okay, 3s
+runtime difference - that&rsquo;s commensurate with the perf regression I&rsquo;m seeing.
+Interesting, we&rsquo;re memory bound twice as frequently. That&rsquo;s strange because
+our memory access pattern should be pretty similar. We&rsquo;re doing over twice as
+many stores. We&rsquo;re doing some additional loads. We&rsquo;re&mldr;</p><p>Wait.</p><p>We&rsquo;re doing over twice as many stores?! That doesn&rsquo;t make sense.</p><h3 id=replacing-crossbeamscope>Replacing crossbeam::scope</h3><p>Perhaps heap allocating the closures was more expensive than I thought, or
+had bad knock-on effects. It&rsquo;s a long shot, but the whole point of side
+projects is following some of those random tangents. I set about eliminating
+<code>crossbeam::scope</code> and using <code>std::thread</code> directly instead. This was a quick
+and dirty test: the entire point of <code>scope</code> is to create an abstraction that
+communicates to the borrow checker that threads we&rsquo;ve spun off have been
+joined, otherwise it doesn&rsquo;t know when a thread&rsquo;s borrow is guaranteed to
+have ended and requires that data references from a thread&rsquo;s closure are all
+static lifetime. In this case I&rsquo;m manually joining the threads, so I can do a
+transmute to placate the compiler. Don&rsquo;t ship code like this, it defeats the
+purpose of using Rust in the first place - you&rsquo;d have a better experience
+with C++. But it can be really handy to circumvent these sorts of checks when
+doing quick prototyping/performance analysis to decide if it&rsquo;s worth the time
+to build out a safe abstraction. I would welcome a &ldquo;just build this without
+the borrow checker&rdquo; mode for cases like this, though I&rsquo;m probably in the
+minority and I don&rsquo;t expect that would be an easy feature to add.</p><p>My testing code looked roughly like this:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-rust data-lang=rust><span style=display:flex><span><span style=color:#00f>let</span> pixels = <span style=color:#00f>unsafe</span> { 
+</span></span><span style=display:flex><span>    mem::transmute::&lt;&amp;<span style=color:#00f>mut</span> [V3], &amp;&#39;static <span style=color:#00f>mut</span> [V3]&gt;(pixels)
+</span></span><span style=display:flex><span>};
+</span></span><span style=display:flex><span><span style=color:#00f>let</span> handle = std::thread::spawn(<span style=color:#00f>move</span> || {
+</span></span><span style=display:flex><span>    <span style=color:green>// code that uses &amp;pixels
+</span></span></span><span style=display:flex><span><span style=color:green></span>});
+</span></span><span style=display:flex><span>handle.join().unwrap();
+</span></span></code></pre></div><p>As expected, no significant performance gains were had.</p><h3 id=looking-at-the-asm-pt-2>Looking at the asm, pt. 2&mldr;</h3><p>Something isn&rsquo;t adding up so I want to look at the assembly again, but I&rsquo;d like to
+clearly distinguish between my unchanged business logic and the
+rayon/crossbeam coordination code. The majority of my business logic is
+behind a single function named <code>cast</code>; adding <code>#[inline(never)]</code> to that single ray processing function
+should give me a nice seam between rayon and my business logic.</p><p>Build, run and the rayon version slows down&mldr; in fact it runs exactly as slow as the crossbeam
+version.</p><p>I try adding <code>#[inline(always)]</code> to the <code>cast</code> function in the crossbeam
+version, and lo and behold it speeds up to match the original rayon version,
+my regression disappears.</p><p>But, how&rsquo;s that possible? The <em>first</em> thing I did was look at inlining. Maybe
+my quick once-over missed it, maybe I misread and this whole circuitous path
+is all my fault?</p><p>I generated assembly output for both the inlined and noninlined versions of the crossbeam ray tracer:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>$ rg ecl_rt4cast inline.s 
+</span></span><span style=display:flex><span>21293:	.asciz	<span style=color:#a31515>&#34;_ZN6ecl_rt4cast17hc1100eade04dff75E&#34;</span>
+</span></span><span style=display:flex><span>$ rg ecl_rt4cast noinline.s 
+</span></span><span style=display:flex><span>21293:	.asciz	<span style=color:#a31515>&#34;_ZN6ecl_rt4cast17hc1100eade04dff75E&#34;</span>
+</span></span></code></pre></div><p>I&rsquo;m building release with symbols, so that string is expected. But neither
+version, not even the non-inlined version, is making calls to <code>cast()</code>.
+Curious.</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>$ wc -l inline.s 
+</span></span><span style=display:flex><span>203969 inline.s
+</span></span><span style=display:flex><span>$ wc -l noinline.s 
+</span></span><span style=display:flex><span>203969 noinline.s
+</span></span></code></pre></div><p>Now I feel like I&rsquo;m being gaslighted. These are the exact same length. A diff
+shows that the only changes are some arbitrary IDs in debug info. I have a
+difficult relationship with optimizing compilers, so my first thought is maybe
+clang&rsquo;s being clang again and I should go validate the binaries instead&mldr;</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4><code class=language-bash data-lang=bash><span style=display:flex><span>$ objdump -d ecl_rt_inline | rg ecl_rt4cast
+</span></span><span style=display:flex><span>&lt;no output&gt;
+</span></span><span style=display:flex><span>$ objdump -d ecl_rt_noinline | rg ecl_rt4cast
+</span></span><span style=display:flex><span>0000000100003190 __ZN6ecl_rt4cast17hc1100eade04dff75E:
+</span></span><span style=display:flex><span>100003299: e9 af 01 00 00              	jmp	431 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x2bd&gt;
+</span></span><span style=display:flex><span>1000034a2: eb 1f                       	jmp	31 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x333&gt;
+</span></span><span style=display:flex><span>1000034c6: 74 38                       	je	56 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x370&gt;
+</span></span><span style=display:flex><span>1000034e5: 0f 82 f5 00 00 00           	jb	245 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&gt;
+</span></span><span style=display:flex><span>1000034ee: 72 1d                       	jb	29 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x37d&gt;
+</span></span><span style=display:flex><span>1000034f0: e9 eb 00 00 00              	jmp	235 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&gt;
+</span></span><span style=display:flex><span>100003503: 0f 83 d7 00 00 00           	jae	215 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x450&gt;
+</span></span><span style=display:flex><span>100003515: 0f 87 16 03 00 00           	ja	790 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6a1&gt;
+</span></span><span style=display:flex><span>10000351e: 0f 82 1f 03 00 00           	jb	799 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6b3&gt;
+</span></span><span style=display:flex><span>100003527: 0f 82 2b 03 00 00           	jb	811 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6c8&gt;
+</span></span><span style=display:flex><span>100003530: 0f 82 37 03 00 00           	jb	823 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6dd&gt;
+</span></span><span style=display:flex><span>100003539: 0f 82 40 03 00 00           	jb	832 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x6ef&gt;
+</span></span><span style=display:flex><span>100003590: 0f 84 1a ff ff ff           	je	-230 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x320&gt;
+</span></span><span style=display:flex><span>1000035db: e9 d0 fe ff ff              	jmp	-304 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x320&gt;
+</span></span><span style=display:flex><span>10000360a: 0f 86 a1 01 00 00           	jbe	417 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x621&gt;
+</span></span><span style=display:flex><span>100003637: 0f 87 57 02 00 00           	ja	599 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x704&gt;
+</span></span><span style=display:flex><span>100003668: 0f 86 3d 02 00 00           	jbe	573 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x71b&gt;
+</span></span><span style=display:flex><span>100003682: 0f 84 41 01 00 00           	je	321 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x639&gt;
+</span></span><span style=display:flex><span>100003707: 0f 85 93 fb ff ff           	jne	-1133 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x110&gt;
+</span></span><span style=display:flex><span>10000371a: 0f 86 9f 01 00 00           	jbe	415 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x72f&gt;
+</span></span><span style=display:flex><span>100003723: 0f 86 a8 01 00 00           	jbe	424 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x741&gt;
+</span></span><span style=display:flex><span>10000372c: 0f 86 b1 01 00 00           	jbe	433 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x753&gt;
+</span></span><span style=display:flex><span>1000037ac: e9 57 fc ff ff              	jmp	-937 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x278&gt;
+</span></span><span style=display:flex><span>1000037c7: eb 12                       	jmp	18 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E+0x64b&gt;
+</span></span><span style=display:flex><span>100009740: e8 4b 9a ff ff              	callq	-26037 &lt;__ZN6ecl_rt4cast17hc1100eade04dff75E&gt;
+</span></span></code></pre></div><p>Bingo - note the <code>callq</code>. Clearly my crossbeam version wasn&rsquo;t inlining as
+aggresively as the rayon version, possibly due to the <code>Box::new(closure)</code>.
+Instructing the compiler to do so brought performance in line with
+expectations. It&rsquo;s silly that the compiler wasn&rsquo;t inlining it in the first
+place, this function has a single callsite and inlining it improves both
+runtime performance and binary size.</p><p>That means <code>--emit=asm</code> does something entirely unexpected. I dug around and sure enough <a href=https://users.rust-lang.org/t/emit-asm-changes-the-produced-machine-code/17701/4>there are
+reports</a>
+that running with <code>--emit=asm</code> will build with a different configuration due
+to interaction with ThinLTO and codegen units.</p><h3 id=fin>Fin</h3><p>It&rsquo;s not ideal to rely on disassemblers because they&rsquo;re also fallible. In the
+same way that going from C to asm loses fidelity and makes decompiling from
+asm to C difficult, going from asm to machine code also loses fidelity and
+there can be inconsistenices when disassembling machine code back into asm.</p><p>The common disassemblers like <code>objdump</code> are linear sweep and can suffer from
+mistaking data for code. There&rsquo;s another family of disassemblers based on
+recursive traversal that avoid those problems, but come with their own set of
+tradeoffs.</p><p>Note that the learning curve on disassemblers can be steep. These tools are
+often packaged into a suite and targeted towards reverse engineering and
+malware analysis, they come with far more features than &ldquo;give me a good
+disassembly and make it easy to visualize/browse.&rdquo; Hopefully it&rsquo;ll be easier
+to match the <code>--emit=asm</code> build config to a normal release build config in
+the future, but until then I&rsquo;ll be getting comfortable with
+<a href=https://ghidra-sre.org>Ghidra</a>.</p></div></article></div></main><footer class="site-footer h-card"><div class=wrapper><div class=footer-col-wrapper><div class="footer-col footer-col-1"><a class=u-email href=mailto:eli@siliconsprawl.com>eli@siliconsprawl.com</a></div><div class="footer-col footer-col-2"><ul class=social-media-list><li><a href=https://github.com/elindsey><svg class="svg-icon"><use xlink:href="/social-icons.svg#github"/></svg></a></li><li><a href=https://www.linkedin.com/in/elilind><svg class="svg-icon"><use xlink:href="/social-icons.svg#linkedin"/></svg></a></li><li><a href=https://siliconsprawl.com/feed.xml><svg class="svg-icon"><use xlink:href="/social-icons.svg#rss"/></svg></a></li></ul></div></div></div></footer></body></html>
