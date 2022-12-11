@@ -1,0 +1,10 @@
+{{ define "main" }}
+{{ .Content }}
+<ul class="post-list">
+    {{- range where site.RegularPages "Type" "in" site.Params.mainSections }}
+    <li>
+        <a class="post-link" href="{{ .Permalink }}">{{ .Title }}</a>
+    </li>
+    {{- end }}
+</ul>
+{{ end }}

@@ -1,0 +1,38 @@
+{{- $pages := where .Site.RegularPages "Type" "in" .Site.Params.mainSections -}}
+{{- $limit := .Site.Config.Services.RSS.Limit -}}
+{{- if ge $limit 1 -}}
+{{- $pages = $pages | first $limit -}}
+{{- end -}}
+{{ printf "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>" | safeHTML }}
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="{{ .Site.LanguageCode }}">
+  <generator>Hugo -- gohugo.io</generator>
+  {{- with .OutputFormats.Get "ATOM" }}
+  <id>{{ .Permalink }}</id>
+  {{ printf `<link rel="self" type="%s" href="%s"/>` .MediaType.Type .Permalink | safeHTML }}
+  {{- end }}
+  {{- range .AlternativeOutputFormats }}
+  {{ printf `<link rel="alternate" type="%s" href="%s"/>` .MediaType.Type .Permalink | safeHTML }}
+  {{- end }}
+  <updated>{{ dateFormat "2006-01-02T15:04:05-07:00" now.UTC | safeHTML }}</updated>
+  <title>{{ .Site.Title }}</title>
+  <author>
+    <name>{{ .Site.Author.name }}</name>
+  </author>
+  {{- with .Site.Copyright }}
+  <rights>{{.}}</rights>
+  {{- end }}
+  {{- range $pages }}
+  <entry>
+    <title>{{ .Title }}</title>
+    <published>{{ dateFormat "2006-01-02T15:04:05-07:00" .Date.UTC | safeHTML }}</published>
+    <updated>{{ dateFormat "2006-01-02T15:04:05-07:00" .Lastmod.UTC | safeHTML }}</updated>
+    <id>{{ .Permalink }}</id>
+    {{ printf `<link href="%s" rel="alternate" title="%s"/>` .Permalink .Title | safeHTML }}
+    <author>
+      <name>{{ .Site.Author.name }}</name>
+    </author>
+    <summary type="html">{{ .Summary | html }}</summary>
+    <content type="html">{{ .Content | html }}</content>
+  </entry>
+  {{- end }}
+</feed>

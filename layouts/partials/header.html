@@ -1,0 +1,10 @@
+<header role="banner" class="site-header">
+    <div class="wrapper">
+        <a class="site-title" href="{{ .Site.BaseURL }}">{{ .Site.Title }}</a>
+        <nav class="site-nav">
+            {{ range .Site.Menus.main.ByWeight -}}
+            {{ .Pre }}<a class="page-link" href="{{ .URL }}" title="{{ .Title }}">{{- .Name -}}</a>{{ .Post }}
+            {{- end }}
+        </nav>
+    </div>
+</header>

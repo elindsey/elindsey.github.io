@@ -1,0 +1,45 @@
+baseURL: 'https://siliconsprawl.com'
+title: silicon_sprawl_
+author:
+  name: Eli Lindsey
+  email: eli@siliconsprawl.com
+  github_user: elindsey
+  linkedin_user: elilind
+languageCode: en-US
+enableInlineShortcodes: true
+disableKinds:
+  - section
+  - taxonomy
+  - term
+markup:
+  highlight:
+    style: vs
+params:
+  # site-wide description for og
+  description: It's a website.
+  mainSections: posts
+menu:
+  main:
+    - identifier: about
+      name: about
+      title: about
+      url: /about/
+
+outputs:
+  home:
+    - HTML
+    - ATOM
+
+outputFormats:
+  ATOM:
+    name: ATOM
+    baseName: feed
+    mediaType: application/atom+xml
+
+mediaTypes:
+  application/atom+xml:
+    suffixes:
+      - xml
+
+# gh integration https://gohugo.io/hosting-and-deployment/hosting-on-github/
+# todo: dark mode

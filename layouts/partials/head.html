@@ -1,0 +1,18 @@
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
+    {{ with .OutputFormats.Get "ATOM" -}}
+        {{ printf `<link rel="%s" type="%s" href="%s" title="%s">` .Rel .MediaType.Type .Permalink $.Site.Title | safeHTML }}
+    {{ end -}}
+
+    {{ $options := (dict "outputStyle" "compressed" "enableSourceMap" (not hugo.IsProduction)) }}
+    {{ $style := resources.Get "style.scss" | resources.ToCSS $options }}
+    {{ printf `<link rel="stylesheet" href="%s">` $style.RelPermalink | safeHTML }}
+
+    <link rel="canonical" href="{{ .Permalink }}" />
+    <title>{{ .Title }}</title>
+    <meta name="author" content="{{ .Site.Author.name }}">
+
+    {{ template "_internal/opengraph.html" . }}
+</head>
