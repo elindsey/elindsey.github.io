@@ -1,10 +1,5 @@
 baseURL: 'https://siliconsprawl.com'
 title: silicon_sprawl_
-author:
-  name: Eli Lindsey
-  email: eli@siliconsprawl.com
-  github_user: elindsey
-  linkedin_user: elilind
 languageCode: en-US
 enableInlineShortcodes: true
 disableKinds:
@@ -18,6 +13,11 @@ params:
   # site-wide description for og
   description: It's a website.
   mainSections: posts
+  author:
+    name: Eli Lindsey
+    email: eli@siliconsprawl.com
+    github_user: elindsey
+    linkedin_user: elilind
 menu:
   main:
     - identifier: about

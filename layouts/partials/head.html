@@ -7,12 +7,12 @@
     {{ end -}}
 
     {{ $options := (dict "outputStyle" "compressed" "enableSourceMap" (not hugo.IsProduction)) }}
-    {{ $style := resources.Get "style.scss" | resources.ToCSS $options }}
+    {{ $style := resources.Get "style.scss" | toCSS $options }}
     {{ printf `<link rel="stylesheet" href="%s">` $style.RelPermalink | safeHTML }}
 
     <link rel="canonical" href="{{ .Permalink }}" />
     <title>{{ .Title }}</title>
-    <meta name="author" content="{{ .Site.Author.name }}">
+    <meta name="author" content="{{ .Site.Params.Author.name }}">
 
     {{ template "_internal/opengraph.html" . }}
 </head>

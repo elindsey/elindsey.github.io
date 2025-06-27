@@ -16,7 +16,7 @@
   <updated>{{ dateFormat "2006-01-02T15:04:05-07:00" now.UTC | safeHTML }}</updated>
   <title>{{ .Site.Title }}</title>
   <author>
-    <name>{{ .Site.Author.name }}</name>
+    <name>{{ .Site.Params.Author.name }}</name>
   </author>
   {{- with .Site.Copyright }}
   <rights>{{.}}</rights>
@@ -29,7 +29,7 @@
     <id>{{ .Permalink }}</id>
     {{ printf `<link href="%s" rel="alternate" title="%s"/>` .Permalink .Title | safeHTML }}
     <author>
-      <name>{{ .Site.Author.name }}</name>
+      <name>{{ .Site.Params.Author.name }}</name>
     </author>
     <summary type="html">{{ .Summary | html }}</summary>
     <content type="html">{{ .Content | html }}</content>

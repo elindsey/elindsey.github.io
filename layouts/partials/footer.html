@@ -3,20 +3,20 @@
     <div class="footer-col-wrapper">
 
       <div class="footer-col footer-col-1">
-        <a class="u-email" href="mailto:{{ .Site.Author.email }}">{{ .Site.Author.email }}</a>
+        <a class="u-email" href="mailto:{{ .Site.Params.Author.email }}">{{ .Site.Params.Author.email }}</a>
       </div>
 
       <div class="footer-col footer-col-2">
         <ul class="social-media-list">
           <li>
-            <a href="https://github.com/{{ .Site.Author.github_user }}">
+            <a href="https://github.com/{{ .Site.Params.Author.github_user }}">
               <svg class="svg-icon">
                 <use xlink:href="/social-icons.svg#github"></use>
               </svg>
             </a>
           </li>
           <li>
-            <a href="https://www.linkedin.com/in/{{ .Site.Author.linkedin_user }}">
+            <a href="https://www.linkedin.com/in/{{ .Site.Params.Author.linkedin_user }}">
               <svg class="svg-icon">
                 <use xlink:href="/social-icons.svg#linkedin"></use>
               </svg>
