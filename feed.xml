@@ -1,8 +1,51 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><generator>Hugo -- gohugo.io</generator><id>https://siliconsprawl.com/feed.xml</id><link rel="self" type="application/atom+xml" href="https://siliconsprawl.com/feed.xml"/><link rel="alternate" type="text/html" href="https://siliconsprawl.com/"/><updated>2025-03-24T12:07:13+00:00</updated><title>silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title>RecordStream</title><published>2022-12-19T00:00:00+00:00</published><updated>2022-12-19T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/recordstream/</id><link href="https://siliconsprawl.com/posts/recordstream/" rel="alternate" title="RecordStream"/><author><name>Eli Lindsey</name></author><summary type="html">Note: this post is a historical relic, originally written in 2014.
-This is a tutorial introduction to RecordStream, half-heartedly adapted from a presentation I gave at SeaGL 2013 some months ago.
-Recs is the best ideas of Microsoft&amp;rsquo;s PowerShell applied to the Unix environment. It&amp;rsquo;s a collection of scripts for lightweight, ad-hoc data analysis based around a common internal representation.
-It&amp;rsquo;s comprised of:
-Input scripts that convert some input data source to newline delimited JSON Data processing scripts that work on newline delimited JSON Output scripts that convert newline delimited JSON to something pretty (like a table, HTML, gnuplot, etc.</summary><content type="html">&lt;p>&lt;strong>Note: this post is a historical relic, originally written in 2014.&lt;/strong>&lt;/p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><generator>Hugo -- gohugo.io</generator><id>https://siliconsprawl.com/feed.xml</id><link rel="self" type="application/atom+xml" href="https://siliconsprawl.com/feed.xml"/><link rel="alternate" type="text/html" href="https://siliconsprawl.com/"/><updated>2025-06-27T19:12:13+00:00</updated><title>silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title>Detecting Hangup</title><published>2025-06-27T00:00:00+00:00</published><updated>2025-06-27T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/networking-shorts-hangup/</id><link href="https://siliconsprawl.com/posts/networking-shorts-hangup/" rel="alternate" title="Detecting Hangup"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Let&amp;rsquo;s suppose you create a TCP connection but may not use it for some time, for
+example in a preconnected pool of TCP connections. When you eventually go to use
+it, there&amp;rsquo;s a possibility that the other end has already decided to hang up and
+close the connection - at which point you&amp;rsquo;d like to either pull another
+connection, establish an entirely fresh connection, or take some other action.&lt;/p>
+&lt;p>Let&amp;rsquo;s further suppose that a connection is &amp;lsquo;dead&amp;rsquo; for our purposes if it&amp;rsquo;s
+either half or fully closed. There are some valid uses for half-closed
+connections, but they&amp;rsquo;re uncommon and a layer 7 request/response protocol (http,
+DNS, etc.) is generally not one of them.&lt;/p></summary><content type="html">&lt;p>Let&amp;rsquo;s suppose you create a TCP connection but may not use it for some time, for
+example in a preconnected pool of TCP connections. When you eventually go to use
+it, there&amp;rsquo;s a possibility that the other end has already decided to hang up and
+close the connection - at which point you&amp;rsquo;d like to either pull another
+connection, establish an entirely fresh connection, or take some other action.&lt;/p>
+&lt;p>Let&amp;rsquo;s further suppose that a connection is &amp;lsquo;dead&amp;rsquo; for our purposes if it&amp;rsquo;s
+either half or fully closed. There are some valid uses for half-closed
+connections, but they&amp;rsquo;re uncommon and a layer 7 request/response protocol (http,
+DNS, etc.) is generally not one of them.&lt;/p>
+&lt;p>How would you go about detecting that a connection taken from the preconnected
+pool is dead?&lt;/p>
+&lt;p>The first idea is to simply write() to it and see if it returns an error. But
+this can incur much more latency than you might think. If the other end has
+closed and sent us a FIN then the connection will be half-closed. The write()
+succeeds, the bytes go across the network, the remote host sends a RST in
+response, and subsequent calls to write() will now return an error. It takes us
+a network round trip to discover that the connection is dead, and our
+application logic becomes much more complicated since it now needs some form of
+&amp;ldquo;retry with another connection from the pool&amp;rdquo; logic for writes &lt;em>after&lt;/em> the first
+one.&lt;/p>
+&lt;p>Ideally we&amp;rsquo;d be able to detect that the FIN was received and treat half-closed
+connections as dead prior to the initial write(). On some operating systems
+(FreeBSD, Linux) there&amp;rsquo;s an explicit event that can be polled for to detect this
+condition: &lt;code>POLLRDHUP&lt;/code>. On operating systems that don&amp;rsquo;t support this event
+(Darwin), you can usually get away with polling for readability via &lt;code>POLLIN&lt;/code>.
+Assuming a request/response layer 7 protocol, if the client has preconnected a
+TCP connection but not yet used it then any readability events (including FIN
+received) are unexpected and cause for discarding the connection.&lt;/p></content></entry><entry><title>RecordStream</title><published>2022-12-19T00:00:00+00:00</published><updated>2022-12-19T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/recordstream/</id><link href="https://siliconsprawl.com/posts/recordstream/" rel="alternate" title="RecordStream"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>&lt;strong>Note: this post is a historical relic, originally written in 2014.&lt;/strong>&lt;/p>
+&lt;p>This is a tutorial introduction to &lt;a href="https://github.com/benbernard/RecordStream">RecordStream&lt;/a>, half-heartedly
+adapted from a presentation I gave at SeaGL 2013 some months ago.&lt;/p>
+&lt;p>Recs is the best ideas of Microsoft&amp;rsquo;s PowerShell applied to the Unix environment. It&amp;rsquo;s a collection of
+scripts for lightweight, ad-hoc data analysis based around a common internal representation.&lt;/p>
+&lt;p>It&amp;rsquo;s comprised of:&lt;/p>
+&lt;ul>
+&lt;li>Input scripts that convert some input data source to newline delimited JSON&lt;/li>
+&lt;li>Data processing scripts that work on newline delimited JSON&lt;/li>
+&lt;li>Output scripts that convert newline delimited JSON to something pretty (like a table, HTML, gnuplot, etc.)&lt;/li>
+&lt;/ul>
+&lt;p>There are two major advantages over rolling your own data analysis scripts or relying solely on the traditional Unix
+utilities:&lt;/p></summary><content type="html">&lt;p>&lt;strong>Note: this post is a historical relic, originally written in 2014.&lt;/strong>&lt;/p>
 &lt;p>This is a tutorial introduction to &lt;a href="https://github.com/benbernard/RecordStream">RecordStream&lt;/a>, half-heartedly
 adapted from a presentation I gave at SeaGL 2013 some months ago.&lt;/p>
 &lt;p>Recs is the best ideas of Microsoft&amp;rsquo;s PowerShell applied to the Unix environment. It&amp;rsquo;s a collection of
@@ -187,9 +230,15 @@ Sun Oct 6 14:00:00 2013 {&amp;quot;50&amp;quot;:&amp;quot;0.134&amp;quot;,&amp;q
 Sun Oct 6 15:00:00 2013 {&amp;quot;50&amp;quot;:&amp;quot;0.146&amp;quot;,&amp;quot;100&amp;quot;:&amp;quot;29.155&amp;quot;}
 Sun Oct 6 16:00:00 2013 {&amp;quot;50&amp;quot;:&amp;quot;0.134&amp;quot;,&amp;quot;100&amp;quot;:&amp;quot;0.274&amp;quot;}
 Sun Oct 6 17:00:00 2013 {&amp;quot;50&amp;quot;:&amp;quot;0.134&amp;quot;,&amp;quot;100&amp;quot;:&amp;quot;0.376&amp;quot;}
-&lt;/code>&lt;/pre></content></entry><entry><title>Rust emit=asm Can Be Misleading</title><published>2020-11-09T00:00:00+00:00</published><updated>2020-11-09T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/rust-emit-asm/</id><link href="https://siliconsprawl.com/posts/rust-emit-asm/" rel="alternate" title="Rust emit=asm Can Be Misleading"/><author><name>Eli Lindsey</name></author><summary type="html">The short version Cargo builds like:
-$ RUSTFLAGS=&amp;#34;--emit asm&amp;#34; cargo build --release $ cargo rustc --release -- --emit asm Do not always output assembly equivalent to the machine code you&amp;rsquo;d get from:
-$ cargo build --release Possibly rustc --emit=asm has some uses, like examining a single file with no external dependencies, but it&amp;rsquo;s not useful for my normal case of wanting to look at the asm for an arbitrary release build.</summary><content type="html">&lt;h2 id="the-short-version">The short version&lt;/h2>
+&lt;/code>&lt;/pre></content></entry><entry><title>Rust emit=asm Can Be Misleading</title><published>2020-11-09T00:00:00+00:00</published><updated>2020-11-09T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/rust-emit-asm/</id><link href="https://siliconsprawl.com/posts/rust-emit-asm/" rel="alternate" title="Rust emit=asm Can Be Misleading"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;h2 id="the-short-version">The short version&lt;/h2>
+&lt;p>Cargo builds like:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-bash" data-lang="bash">&lt;span style="display:flex;">&lt;span>$ RUSTFLAGS=&lt;span style="color:#a31515">&amp;#34;--emit asm&amp;#34;&lt;/span> cargo build --release
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>$ cargo rustc --release -- --emit asm
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Do not always output assembly equivalent to the machine code you&amp;rsquo;d get from:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-bash" data-lang="bash">&lt;span style="display:flex;">&lt;span>$ cargo build --release
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>Possibly &lt;code>rustc --emit=asm&lt;/code> has some uses, like examining a single file with
+no external dependencies, but it&amp;rsquo;s not useful for my normal case of wanting
+to look at the asm for an arbitrary release build.&lt;/p></summary><content type="html">&lt;h2 id="the-short-version">The short version&lt;/h2>
 &lt;p>Cargo builds like:&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-bash" data-lang="bash">&lt;span style="display:flex;">&lt;span>$ RUSTFLAGS=&lt;span style="color:#a31515">&amp;#34;--emit asm&amp;#34;&lt;/span> cargo build --release
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>$ cargo rustc --release -- --emit asm
@@ -375,7 +424,13 @@ malware analysis, they come with far more features than &amp;ldquo;give me a goo
 disassembly and make it easy to visualize/browse.&amp;rdquo; Hopefully it&amp;rsquo;ll be easier
 to match the &lt;code>--emit=asm&lt;/code> build config to a normal release build config in
 the future, but until then I&amp;rsquo;ll be getting comfortable with
-&lt;a href="https://ghidra-sre.org">Ghidra&lt;/a>.&lt;/p></content></entry><entry><title>Rust Ray Tracer, an Update (and SIMD)</title><published>2020-11-06T00:00:00+00:00</published><updated>2020-11-06T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/simd-ray-tracer/</id><link href="https://siliconsprawl.com/posts/simd-ray-tracer/" rel="alternate" title="Rust Ray Tracer, an Update (and SIMD)"/><author><name>Eli Lindsey</name></author><summary type="html">About a month ago I ported my C99 ray tracer side project to Rust. The initial port went smoothly, and I&amp;rsquo;ve now been plugging away adding features and repeatedly rewriting it in my spare hours. In parallel I&amp;rsquo;m getting up to speed on a large, production Rust codebase at work. The contrast between the two has been interesting - I have almost entirely positive things to say about Rust for large, multi-threaded codebases, but it hasn&amp;rsquo;t been as good of a fit for the ray tracer.</summary><content type="html">&lt;p>About &lt;a href="/2020/09/27/rust-ray-tracer.html">a month ago&lt;/a> I ported my C99 ray
+&lt;a href="https://ghidra-sre.org">Ghidra&lt;/a>.&lt;/p></content></entry><entry><title>Rust Ray Tracer, an Update (and SIMD)</title><published>2020-11-06T00:00:00+00:00</published><updated>2020-11-06T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/simd-ray-tracer/</id><link href="https://siliconsprawl.com/posts/simd-ray-tracer/" rel="alternate" title="Rust Ray Tracer, an Update (and SIMD)"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>About &lt;a href="/2020/09/27/rust-ray-tracer.html">a month ago&lt;/a> I ported my C99 ray
+tracer side project to Rust. The initial port went smoothly, and I&amp;rsquo;ve now
+been plugging away adding features and repeatedly rewriting it in my spare hours.
+In parallel I&amp;rsquo;m getting up to speed on a large, production Rust codebase at work.
+The contrast between the two has been interesting - I have almost
+entirely positive things to say about Rust for large, multi-threaded
+codebases, but it hasn&amp;rsquo;t been as good of a fit for the ray tracer.&lt;/p></summary><content type="html">&lt;p>About &lt;a href="/2020/09/27/rust-ray-tracer.html">a month ago&lt;/a> I ported my C99 ray
 tracer side project to Rust. The initial port went smoothly, and I&amp;rsquo;ve now
 been plugging away adding features and repeatedly rewriting it in my spare hours.
 In parallel I&amp;rsquo;m getting up to speed on a large, production Rust codebase at work.
@@ -540,8 +595,14 @@ nicely.&lt;/p>
 &lt;p>&amp;ldquo;Nope, I definitely need to normalize there.&amp;rdquo;&lt;/p>
 &lt;h3 id="inside-out">Inside Out&lt;/h3>
 &lt;p>&lt;img src="bad_sqrt1.png" alt="">&lt;/p>
-&lt;p>This came from trying to use a fast inverse sqrt without a refinement step. A lot of my intersections were messed up, so rays ended up bouncing around &lt;em>inside&lt;/em> objects and things got weird.&lt;/p></content></entry><entry><title>Porting a C99 Ray Tracer to Rust</title><published>2020-09-27T00:00:00+00:00</published><updated>2020-09-27T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/rust-ray-tracer/</id><link href="https://siliconsprawl.com/posts/rust-ray-tracer/" rel="alternate" title="Porting a C99 Ray Tracer to Rust"/><author><name>Eli Lindsey</name></author><summary type="html">I needed to pick up Rust for work, so I ported my existing ray tracer to the language for a little practice. It&amp;rsquo;s now in the unimaginatively named ecl_rt.
-Overall it was a pleasant experience. I particularly like Rust&amp;rsquo;s object system (am I allowed to call it that?), the bounded generics, how it handles numeric primitives (requiring explicit conversion, giving easy, explicit control of overflow behavior), the focus on expressions, and the rayon library.</summary><content type="html">&lt;p>I needed to pick up Rust for work, so I ported my existing ray tracer to the
+&lt;p>This came from trying to use a fast inverse sqrt without a refinement step. A lot of my intersections were messed up, so rays ended up bouncing around &lt;em>inside&lt;/em> objects and things got weird.&lt;/p></content></entry><entry><title>Porting a C99 Ray Tracer to Rust</title><published>2020-09-27T00:00:00+00:00</published><updated>2020-09-27T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/rust-ray-tracer/</id><link href="https://siliconsprawl.com/posts/rust-ray-tracer/" rel="alternate" title="Porting a C99 Ray Tracer to Rust"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>I needed to pick up Rust for work, so I ported my existing ray tracer to the
+language for a little practice. It&amp;rsquo;s now in the unimaginatively named
+&lt;a href="https://github.com/elindsey/ecl_rrt">ecl_rt&lt;/a>.&lt;/p>
+&lt;p>Overall it was a pleasant experience. I particularly like Rust&amp;rsquo;s object system
+(am I allowed to call it that?), the bounded generics, how it handles numeric
+primitives (requiring explicit conversion, giving easy, explicit control of
+overflow behavior), the focus on expressions, and the rayon library. The
+ML aspects are refreshing, but easy to overdo.&lt;/p></summary><content type="html">&lt;p>I needed to pick up Rust for work, so I ported my existing ray tracer to the
 language for a little practice. It&amp;rsquo;s now in the unimaginatively named
 &lt;a href="https://github.com/elindsey/ecl_rrt">ecl_rt&lt;/a>.&lt;/p>
 &lt;p>Overall it was a pleasant experience. I particularly like Rust&amp;rsquo;s object system
@@ -575,7 +636,10 @@ looked into what exactly it&amp;rsquo;s doing differently.&lt;/p>
 &lt;p>I flipped the colors, but tried to get too clever with the PRNG. In this image I tried to seed my PRNG with the thread ID - which would be fine, except rayon was calling my seed function each time it checked out work from the job pool. Instead of a thread seeding once, it would reseed with the thread ID approximately fifty times over the course of the run. This causes visibile artifacting and the bands you see in the image. Rather than adjust it to only seed once, I opted to used the rand crate for reseeding (it&amp;rsquo;s so few calls that the overhead is negligible).&lt;/p>
 &lt;h3 id="finally">Finally&amp;hellip;&lt;/h3>
 &lt;p>&lt;img src="5.png" alt="">&lt;/p>
-&lt;p>And now everything is sorted and we&amp;rsquo;re comparable to the ecl_rt reference image!&lt;/p></content></entry><entry><title>DLX Redux</title><published>2020-09-08T00:00:00+00:00</published><updated>2020-09-08T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/dlx-redux/</id><link href="https://siliconsprawl.com/posts/dlx-redux/" rel="alternate" title="DLX Redux"/><author><name>Eli Lindsey</name></author><summary type="html">Note: this post was from a college side project circa 2010. It held up fairly well, so I'm reposting it as-is. You've been warned. I was never all that interested in working Sudokus by hand. I've known a few people who were straight up addicted to it, but I never understood the draw. To me, games become much less fun when I know that a relatively straightforward method of solving them exists.</summary><content type="html">
+&lt;p>And now everything is sorted and we&amp;rsquo;re comparable to the ecl_rt reference image!&lt;/p></content></entry><entry><title>DLX Redux</title><published>2020-09-08T00:00:00+00:00</published><updated>2020-09-08T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/dlx-redux/</id><link href="https://siliconsprawl.com/posts/dlx-redux/" rel="alternate" title="DLX Redux"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>
+&lt;b>Note: this post was from a college side project circa 2010. It held up fairly well, so I'm reposting it as-is. You've been warned.&lt;/b>
+&lt;/p>
+&lt;p>I was never all that interested in working Sudokus by hand. I've known a few people who were straight up addicted to it, but I never understood the draw. To me, games become much less fun when I know that a relatively straightforward method of solving them exists. It's happened with Mastermind, Checkers, and, to a lesser extent, Chess. Playing them feels like a waste of time when I could be learning a more complex and interesting game (like &lt;a href="http://query.nytimes.com/gst/fullpage.html?res=9C04EFD6123AF93AA15754C0A961958260">Go&lt;/a>) instead.&lt;/p></summary><content type="html">
 &lt;p>
 &lt;b>Note: this post was from a college side project circa 2010. It held up fairly well, so I'm reposting it as-is. You've been warned.&lt;/b>
 &lt;/p>
@@ -632,8 +696,12 @@ For this simple example, the matrix would look like:&lt;/p>
 &lt;p>For determining columns, there are four constraints that we have to account for: each box, row, and column must have the numbers 1-9 exactly once, and each cell can only have one number (no cheating by writing in two and leaving another cell empty or some such). Each of these four constraints is actually going to break down into 81 individual constraints for a total of 324 columns.&lt;/p>
 &lt;p>For determining rows, we must list every valid position for each number. This is going to be 9 rows * 9 cols * 9 numbers for a total of 729 rows.&lt;/p>
 &lt;p>Once we create the necessary structure, we can remove the rows representing initially filled positions and solve it as a normal exact cover problem with DLX. As we add solutions to our temporary set we keep track of the row name, then just use that after termination to print out a solution (if one exists).&lt;/p>
-&lt;p>And that's about it! It really is a very cool implementation technique, and exact cover relates to a number of other interesting problems, so if you've got some time to spare I'd highly suggest flipping through Knuth's paper.&lt;/p></content></entry><entry><title>Learning About Ray Tracing</title><published>2020-08-02T00:00:00+00:00</published><updated>2020-08-02T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/ray-tracers/</id><link href="https://siliconsprawl.com/posts/ray-tracers/" rel="alternate" title="Learning About Ray Tracing"/><author><name>Eli Lindsey</name></author><summary type="html">I&amp;rsquo;ve had more time than usual for side projects since I&amp;rsquo;ve been stuck inside the past few months. I spent the majority of June digging into graphics, getting acquainted with the field by building a ray tracer. The initial version is now online as ecl_rt.
-Rather than write yet another post about building a ray tracer, I&amp;rsquo;ll point to the handful of resources (from the multitude available) that were actually useful:</summary><content type="html">&lt;p>I&amp;rsquo;ve had more time than usual for side projects since I&amp;rsquo;ve been stuck inside
+&lt;p>And that's about it! It really is a very cool implementation technique, and exact cover relates to a number of other interesting problems, so if you've got some time to spare I'd highly suggest flipping through Knuth's paper.&lt;/p></content></entry><entry><title>Learning About Ray Tracing</title><published>2020-08-02T00:00:00+00:00</published><updated>2020-08-02T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/ray-tracers/</id><link href="https://siliconsprawl.com/posts/ray-tracers/" rel="alternate" title="Learning About Ray Tracing"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>I&amp;rsquo;ve had more time than usual for side projects since I&amp;rsquo;ve been stuck inside
+the past few months. I spent the majority of June digging into graphics, getting
+acquainted with the field by building a ray tracer. The initial version is now
+online as &lt;a href="https://github.com/elindsey/ecl_rt_legacy">ecl_rt&lt;/a>.&lt;/p>
+&lt;p>Rather than write yet another post about building a ray tracer, I&amp;rsquo;ll point to
+the handful of resources (from the multitude available) that were actually useful:&lt;/p></summary><content type="html">&lt;p>I&amp;rsquo;ve had more time than usual for side projects since I&amp;rsquo;ve been stuck inside
 the past few months. I spent the majority of June digging into graphics, getting
 acquainted with the field by building a ray tracer. The initial version is now
 online as &lt;a href="https://github.com/elindsey/ecl_rt_legacy">ecl_rt&lt;/a>.&lt;/p>
@@ -673,9 +741,15 @@ the very first image it rendered to the current state:&lt;/p>
 &lt;p>&lt;img src="3.png" alt="">&lt;/p>
 &lt;p>&lt;img src="4.png" alt="">&lt;/p>
 &lt;p>&lt;img src="5.png" alt="">&lt;/p>
-&lt;p>&lt;img src="6.png" alt="">&lt;/p></content></entry><entry><title>Building Pipelines with Circular Buffers, not Queues</title><published>2020-06-15T00:00:00+00:00</published><updated>2020-06-15T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/circular-buffers-not-queues/</id><link href="https://siliconsprawl.com/posts/circular-buffers-not-queues/" rel="alternate" title="Building Pipelines with Circular Buffers, not Queues"/><author><name>Eli Lindsey</name></author><summary type="html">Structuring programs as pipelines is a nice way to separate business logic and introduce parallelism - if you do it right it gets you both clarity and performance.
-Typically this is done by tying threads together with some form of concurrent queue, such as a channel in Golang, ConcurrentLinkedQueue in Java, or concurrent_queue in C++ (Intel TBB or Microsoft PPL).
-Using a simple integer pipeline as an example, we&amp;rsquo;ll have an initial phase writing random integers, one phase that multiplies its input by two, one phase that increments its input, and a final phase that prints the result.</summary><content type="html">&lt;p>Structuring programs as pipelines is a nice way to separate business logic and
+&lt;p>&lt;img src="6.png" alt="">&lt;/p></content></entry><entry><title>Building Pipelines with Circular Buffers, not Queues</title><published>2020-06-15T00:00:00+00:00</published><updated>2020-06-15T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/circular-buffers-not-queues/</id><link href="https://siliconsprawl.com/posts/circular-buffers-not-queues/" rel="alternate" title="Building Pipelines with Circular Buffers, not Queues"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Structuring programs as pipelines is a nice way to separate business logic and
+introduce parallelism - if you do it right it gets you both clarity and
+performance.&lt;/p>
+&lt;p>Typically this is done by tying threads together with some form of concurrent
+queue, such as a channel in Golang, ConcurrentLinkedQueue in Java, or
+concurrent_queue in C++ (Intel TBB or Microsoft PPL).&lt;/p>
+&lt;p>Using a simple integer pipeline as an example, we&amp;rsquo;ll have an initial phase
+writing random integers, one phase that multiplies its input by two, one phase
+that increments its input, and a final phase that prints the result.&lt;/p></summary><content type="html">&lt;p>Structuring programs as pipelines is a nice way to separate business logic and
 introduce parallelism - if you do it right it gets you both clarity and
 performance.&lt;/p>
 &lt;p>Typically this is done by tying threads together with some form of concurrent
@@ -733,14 +807,14 @@ performance under full load.&lt;/li>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#00f">type&lt;/span> phase &lt;span style="color:#00f">struct&lt;/span> {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> _ [7]&lt;span style="color:#2b91af">int64&lt;/span> &lt;span style="color:#008000">// padding
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#008000">&lt;/span> cursor &lt;span style="color:#2b91af">int64&lt;/span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> _ [7]&lt;span style="color:#2b91af">int64&lt;/span> &lt;span style="color:#008000">// padding
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#008000">&lt;/span> upstream *phase
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> _ [7]&lt;span style="color:#2b91af">int64&lt;/span> &lt;span style="color:#008000">// padding&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> cursor &lt;span style="color:#2b91af">int64&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> _ [7]&lt;span style="color:#2b91af">int64&lt;/span> &lt;span style="color:#008000">// padding&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> upstream *phase
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#00f">const&lt;/span> bufSize = 64 &lt;span style="color:#008000">// must be power of 2
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#008000">&lt;/span>&lt;span style="color:#00f">const&lt;/span> bufMask &lt;span style="color:#2b91af">int64&lt;/span> = bufSize - 1
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#00f">const&lt;/span> bufSize = 64 &lt;span style="color:#008000">// must be power of 2&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#00f">const&lt;/span> bufMask &lt;span style="color:#2b91af">int64&lt;/span> = bufSize - 1
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#00f">var&lt;/span> circularBuf [bufSize]data
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
@@ -763,8 +837,8 @@ performance under full load.&lt;/li>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#00f">for&lt;/span> {
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> upstreamLimit := atomic.LoadInt64(&amp;amp;p.upstream.cursor)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#00f">if&lt;/span> curr == upstreamLimit {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#008000">// empty buffer
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#008000">&lt;/span> upstreamLimit = curr + bufSize - 1
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#008000">// empty buffer&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> upstreamLimit = curr + bufSize - 1
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#00f">for&lt;/span> curr&amp;amp;bufMask != upstreamLimit&amp;amp;bufMask {
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> circularBuf[curr&amp;amp;bufMask].num = r.Intn(100)
@@ -776,8 +850,8 @@ performance under full load.&lt;/li>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#00f">func&lt;/span> main() {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#008000">// writeRandInt -&amp;gt; multTwo -&amp;gt; addOne -&amp;gt; printResult
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#008000">&lt;/span> &lt;span style="color:#00f">var&lt;/span> printResult, addOne, multTwo, writeRandInt phase
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#008000">// writeRandInt -&amp;gt; multTwo -&amp;gt; addOne -&amp;gt; printResult&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#00f">var&lt;/span> printResult, addOne, multTwo, writeRandInt phase
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> writeRandInt.upstream = &amp;amp;printResult
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> printResult.upstream = &amp;amp;addOne
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> addOne.upstream = &amp;amp;multTwo
@@ -797,8 +871,8 @@ performance under full load.&lt;/li>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> fmt.Println(circularBuf[i])
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> })
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#00f">select&lt;/span> {} &lt;span style="color:#008000">// block forever
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#008000">&lt;/span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#00f">select&lt;/span> {} &lt;span style="color:#008000">// block forever&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>This code is meant to show off the core concept in the smallest amount of code
 possible. Fully building this out you would hide the cursor logic behind a nice
 API and the final business logic would look very similar to a queue-based
@@ -846,8 +920,16 @@ generates the assembly I&amp;rsquo;m looking for - straightline code with a &lt;
 &lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>One last note: channels in go are deeply integrated with the runtime and do
 things like make explicit gopark/goready calls, copy values from one
 goroutine&amp;rsquo;s stack directly into another&amp;rsquo;s, etc. You could do a lot worse, and
-should make sure they don&amp;rsquo;t fit your needs before rolling your own.&lt;/p></content></entry><entry><title>Fast Subnet Matching</title><published>2020-06-07T00:00:00+00:00</published><updated>2020-06-07T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/fast-subnet-matching/</id><link href="https://siliconsprawl.com/posts/fast-subnet-matching/" rel="alternate" title="Fast Subnet Matching"/><author><name>Eli Lindsey</name></author><summary type="html">Determining if a subnet contains a given IP is a fundamental operation in networking. Router dataplanes spend all of their time looking up prefix matches to make forwarding decisions, but even higher layers of application code need to perform this operation - for example, looking up a client IP address in a geographical database or checking a client IP against an abuse blocklist.
-Routers have extremely optimized implementations, but since these other uses may be one-off codepaths in a higher-level language (eg.</summary><content type="html">&lt;p>Determining if a subnet contains a given IP is a fundamental operation in
+should make sure they don&amp;rsquo;t fit your needs before rolling your own.&lt;/p></content></entry><entry><title>Fast Subnet Matching</title><published>2020-06-07T00:00:00+00:00</published><updated>2020-06-07T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/fast-subnet-matching/</id><link href="https://siliconsprawl.com/posts/fast-subnet-matching/" rel="alternate" title="Fast Subnet Matching"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Determining if a subnet contains a given IP is a fundamental operation in
+networking. Router dataplanes spend all of their time looking up prefix matches
+to make forwarding decisions, but even higher layers of application code need
+to perform this operation - for example, looking up a client IP address in a
+geographical database or checking a client IP against an abuse blocklist.&lt;/p>
+&lt;p>Routers have extremely optimized implementations, but since these other uses
+may be one-off codepaths in a higher-level language (eg. some random Go
+microservice), they&amp;rsquo;re not written with the same level of care and
+optimization. Sometimes they&amp;rsquo;re written with no care or optimization at all
+and quickly become bottlenecks.&lt;/p></summary><content type="html">&lt;p>Determining if a subnet contains a given IP is a fundamental operation in
 networking. Router dataplanes spend all of their time looking up prefix matches
 to make forwarding decisions, but even higher layers of application code need
 to perform this operation - for example, looking up a client IP address in a
@@ -1066,8 +1148,8 @@ SSE registers as a single 128-bit value (as opposed to 2 64-bit values, 4
 32-bit values, etc.) are quite limited. In particular, &lt;code>_mm_slli_si128&lt;/code> shifts
 by bytes instead of bits so won&amp;rsquo;t work for our use case (though SIMD
 instructions would be useful for performing matches against multiple client IPs
-at once).&lt;/p></content></entry><entry><title>Network Programming Self-Study</title><published>2020-05-10T00:00:00+00:00</published><updated>2020-05-10T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/network-programming-self-study/</id><link href="https://siliconsprawl.com/posts/network-programming-self-study/" rel="alternate" title="Network Programming Self-Study"/><author><name>Eli Lindsey</name></author><summary type="html">Lately I&amp;rsquo;ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.
-I&amp;rsquo;ve been in this space ten years now, working across layers 3 to 7 on CDNs, DNS, and protocol stacks at a couple of FAANGs and a startup. If you name a piece of software that runs in an edge network, I&amp;rsquo;ve probably seen one (or three) versions of it.</summary><content type="html">&lt;p>Lately I&amp;rsquo;ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.&lt;/p>
+at once).&lt;/p></content></entry><entry><title>Network Programming Self-Study</title><published>2020-05-10T00:00:00+00:00</published><updated>2020-05-10T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/network-programming-self-study/</id><link href="https://siliconsprawl.com/posts/network-programming-self-study/" rel="alternate" title="Network Programming Self-Study"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Lately I&amp;rsquo;ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.&lt;/p>
+&lt;p>I&amp;rsquo;ve been in this space ten years now, working across layers 3 to 7 on CDNs, DNS, and protocol stacks at a couple of FAANGs and a startup. If you name a piece of software that runs in an edge network, I&amp;rsquo;ve probably seen one (or three) versions of it.&lt;/p></summary><content type="html">&lt;p>Lately I&amp;rsquo;ve been getting more questions about how to start out in network programming: what books to read, what projects to do, and how to make a career of it.&lt;/p>
 &lt;p>I&amp;rsquo;ve been in this space ten years now, working across layers 3 to 7 on CDNs, DNS, and protocol stacks at a couple of FAANGs and a startup. If you name a piece of software that runs in an edge network, I&amp;rsquo;ve probably seen one (or three) versions of it.&lt;/p>
 &lt;p>Advice is tricky. It&amp;rsquo;s easy to turn things I learned into Things Everyone Should Learn. It&amp;rsquo;s also easy to fit an inaccurate narrative to a path, to recast something as a logical progression when it was really blind stumbling around.
 I could spin a yarn about how networking was the first thing I did with computers, how I did a CCNA in high-school and something something destiny. But I could also tell the story of how I did that CCNA primarily to get out of taking PE, and how I found my college networking class so tedious that I dropped it in the first week and never tried again (for some inexplicable reason it was an optional elective at my university).&lt;/p>
