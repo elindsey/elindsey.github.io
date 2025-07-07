@@ -1,4 +1,40 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><generator>Hugo -- gohugo.io</generator><id>https://siliconsprawl.com/feed.xml</id><link rel="self" type="application/atom+xml" href="https://siliconsprawl.com/feed.xml"/><link rel="alternate" type="text/html" href="https://siliconsprawl.com/"/><updated>2025-07-04T18:47:42+00:00</updated><title>silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title>Detecting Hangup</title><published>2025-06-27T00:00:00+00:00</published><updated>2025-06-27T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/detecting-hangup/</id><link href="https://siliconsprawl.com/posts/detecting-hangup/" rel="alternate" title="Detecting Hangup"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Let&amp;rsquo;s suppose you create a TCP connection but may not use it for some time, for
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><generator>Hugo -- gohugo.io</generator><id>https://siliconsprawl.com/feed.xml</id><link rel="self" type="application/atom+xml" href="https://siliconsprawl.com/feed.xml"/><link rel="alternate" type="text/html" href="https://siliconsprawl.com/"/><updated>2025-07-07T18:50:06+00:00</updated><title>silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title>FIN_WAIT_2</title><published>2025-07-07T00:00:00+00:00</published><updated>2025-07-07T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/fin-wait-2/</id><link href="https://siliconsprawl.com/posts/fin-wait-2/" rel="alternate" title="FIN_WAIT_2"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Many people are familiar with the 3-way handshake used to establish TCP, but may
+not be as familiar with the 4-way (occasionally 3-way) handshake used to close a
+TCP connection, ie. the bottom left section of this diagram:&lt;/p>
+&lt;p>&lt;img src="tcp_state_diagram.png" alt="tcp state diagram">&lt;/p>
+&lt;p>The happy case for shutting down a connection is that the client sends a FIN to
+the server and receives an ACK, then receives a FIN from the server and sends an
+ACK.&lt;/p></summary><content type="html">&lt;p>Many people are familiar with the 3-way handshake used to establish TCP, but may
+not be as familiar with the 4-way (occasionally 3-way) handshake used to close a
+TCP connection, ie. the bottom left section of this diagram:&lt;/p>
+&lt;p>&lt;img src="tcp_state_diagram.png" alt="tcp state diagram">&lt;/p>
+&lt;p>The happy case for shutting down a connection is that the client sends a FIN to
+the server and receives an ACK, then receives a FIN from the server and sends an
+ACK.&lt;/p>
+&lt;p>But the server isn&amp;rsquo;t necessarily under our control and may not be well-behaved,
+and there&amp;rsquo;s a flaky network between them to boot. What happens when things go
+wrong? In other words, what happens if we send a FIN, receive an ACK, then never
+hear from the server again?&lt;/p>
+&lt;p>Strictly according to the RFCs, the socket will land in the FIN_WAIT_2 state
+indefinitely, waiting for a FIN that will never come. The transition from
+FIN_WAIT_2 to CLOSED is entirely application driven, so there would be nothing
+to bail unsuspecting application developers out of this state if it weren&amp;rsquo;t for
+most operating systems choosing to deviate slightly from the standard.
+Specifically, if a socket is shutdown such that the application will never read
+nor write to it again (eg. &lt;code>shutdown(sock, SHUT_RDWR)&lt;/code> or &lt;code>close()&lt;/code>), the kernel
+will apply a timeout to automatically transition from FIN_WAIT_2 to CLOSED
+(controlled by &lt;code>net.ipv4.tcp_fin_timeout&lt;/code> on Linux and &lt;code>finwait2_timeout&lt;/code> on
+FreeBSD). Thus the common case is covered and most people will never need to
+think about this.&lt;/p>
+&lt;p>However! If you&amp;rsquo;re dealing with half-closed connections (&lt;code>shutdown(sock, SHUT_RD/SHUT_WR)&lt;/code>) then those protections aren&amp;rsquo;t applicable and it again becomes
+easy to shoot yourself in the foot by accumulating an ever increasing number of
+connections in FIN_WAIT_2. I&amp;rsquo;ve primarily seen this come up when working on
+proxies that terminate at TCP, often for passthrough proxying with SNI sniffing -
+when you don&amp;rsquo;t have visibility into the upper layer protocols it often makes
+sense to structure the code as two separate half-duplex paths and use half-close
+semantics. If you do this be aware of the FIN_WAIT_2 state and consider
+reimplementing some form of idle timeout to transition the socket from
+FIN_WAIT_2 to CLOSED.&lt;/p></content></entry><entry><title>Detecting Hangup</title><published>2025-06-27T00:00:00+00:00</published><updated>2025-06-27T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/detecting-hangup/</id><link href="https://siliconsprawl.com/posts/detecting-hangup/" rel="alternate" title="Detecting Hangup"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Let&amp;rsquo;s suppose you create a TCP connection but may not use it for some time, for
 example in a preconnected pool of TCP connections. When you eventually go to use
 it, there&amp;rsquo;s a possibility that the other end has already decided to hang up and
 close the connection - at which point you&amp;rsquo;d like to either pull another
