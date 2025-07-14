@@ -1,4 +1,32 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><generator>Hugo -- gohugo.io</generator><id>https://siliconsprawl.com/feed.xml</id><link rel="self" type="application/atom+xml" href="https://siliconsprawl.com/feed.xml"/><link rel="alternate" type="text/html" href="https://siliconsprawl.com/"/><updated>2025-07-11T18:49:57+00:00</updated><title>silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title>FIN_WAIT_2</title><published>2025-07-07T00:00:00+00:00</published><updated>2025-07-07T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/fin-wait-2/</id><link href="https://siliconsprawl.com/posts/fin-wait-2/" rel="alternate" title="FIN_WAIT_2"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Many people are familiar with the 3-way handshake used to establish TCP, but may
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en-US"><generator>Hugo -- gohugo.io</generator><id>https://siliconsprawl.com/feed.xml</id><link rel="self" type="application/atom+xml" href="https://siliconsprawl.com/feed.xml"/><link rel="alternate" type="text/html" href="https://siliconsprawl.com/"/><updated>2025-07-14T18:53:49+00:00</updated><title>silicon_sprawl_</title><author><name>Eli Lindsey</name></author><entry><title>Connected UDP Sockets and ICMP Errors</title><published>2025-07-14T00:00:00+00:00</published><updated>2025-07-14T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/connected-udp-icmp/</id><link href="https://siliconsprawl.com/posts/connected-udp-icmp/" rel="alternate" title="Connected UDP Sockets and ICMP Errors"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>UDP sockets can be created as connected or unconnected. This is purely a local
+convenience and has no bearing on the underlying protocol - it&amp;rsquo;s the same
+connectionless UDP protocol either way. A connected UDP socket is just a way to
+say &amp;ldquo;this socket will always send to and receive from remote address FOO&amp;rdquo;, thus
+letting you use the simpler &lt;code>send()/recv()&lt;/code> syscalls instead of
+&lt;code>sendto()/recvfrom()&lt;/code>.&lt;/p>
+&lt;p>However, this may also have a quirky effect on what errors are surfaced.
+Specifically, asynchronous network errors on Linux are supposed to be surfaced
+to the UDP socket whether or not it&amp;rsquo;s connected, but on BSDs you will likely
+only see errors surfaced for connected sockets. This comes from differing
+interpretations/implementations of &lt;a href="https://www.rfc-editor.org/rfc/rfc1122#page-78">RFC 1122&lt;/a>.&lt;/p></summary><content type="html">&lt;p>UDP sockets can be created as connected or unconnected. This is purely a local
+convenience and has no bearing on the underlying protocol - it&amp;rsquo;s the same
+connectionless UDP protocol either way. A connected UDP socket is just a way to
+say &amp;ldquo;this socket will always send to and receive from remote address FOO&amp;rdquo;, thus
+letting you use the simpler &lt;code>send()/recv()&lt;/code> syscalls instead of
+&lt;code>sendto()/recvfrom()&lt;/code>.&lt;/p>
+&lt;p>However, this may also have a quirky effect on what errors are surfaced.
+Specifically, asynchronous network errors on Linux are supposed to be surfaced
+to the UDP socket whether or not it&amp;rsquo;s connected, but on BSDs you will likely
+only see errors surfaced for connected sockets. This comes from differing
+interpretations/implementations of &lt;a href="https://www.rfc-editor.org/rfc/rfc1122#page-78">RFC 1122&lt;/a>.&lt;/p>
+&lt;p>In practice what this ends up meaning is that errors communicated via ICMP (eg.
+time exceeded, destination unreachable) will show up as syscall return errors
+for some subsequent socket operation (EHOSTUNREACH and ECONNREFUSED,
+respectively). This can be surprising and a bit annoying in cases where you&amp;rsquo;re
+actually intending to generate these ICMP reponses, such as a traceroute
+implementation or similar network probing. In those cases, depending on the
+platform and depending on if the socket is connected or unconnected you may need
+to ignore and retry certain classes of errors on read/write.&lt;/p></content></entry><entry><title>FIN_WAIT_2</title><published>2025-07-07T00:00:00+00:00</published><updated>2025-07-07T00:00:00+00:00</updated><id>https://siliconsprawl.com/posts/fin-wait-2/</id><link href="https://siliconsprawl.com/posts/fin-wait-2/" rel="alternate" title="FIN_WAIT_2"/><author><name>Eli Lindsey</name></author><summary type="html">&lt;p>Many people are familiar with the 3-way handshake used to establish TCP, but may
 not be as familiar with the 4-way (occasionally 3-way) handshake used to close a
 TCP connection, ie. the bottom left section of this diagram:&lt;/p>
 &lt;p>&lt;img src="tcp_state_diagram.png" alt="tcp state diagram">&lt;/p>
