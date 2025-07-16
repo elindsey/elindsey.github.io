@@ -46,7 +46,7 @@ Network programming is a form of systems programming. There are certain systems 
 
 ### Tangent: Languages
 
-I'm going to avoid languages except for one note: you'll need to know C, even if it's just enough to read others' code. There are plenty of ways to learn it, but I'd recommend [Modern C](https://modernc.gforge.inria.fr). I have some minor nits with the book, but it's a high-quality, concise, freely available text that covers all the language features you need to know and points out many of the problematic areas.
+I'm going to avoid languages except for one note: you'll need to know C, even if it's just enough to read others' code. There are plenty of ways to learn it, but I'd recommend [Modern C](https://gustedt.gitlabpages.inria.fr/modern-c/). I have some minor nits with the book, but it's a high-quality, concise, freely available text that covers all the language features you need to know and points out many of the problematic areas.
 
 C is a simple language. It doesn't benefit from reading many books or tutorials. Most of the complexity lies in working with memory and dealing with optimizing compilers, so you must use it to understand it.
 
